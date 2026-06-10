@@ -1,0 +1,16 @@
+{
+  "slides": [
+    {
+      "id": 1,
+      "title": "AI photo editor",
+      "description": "Edit photos with AI tools",
+      "imageUrl": "http://94.131.92.240:8080/assets/onboarding/onboarding_1.png"
+    },
+    {
+      "id": 2,
+      "title": "Remove background",
+      "description": "Remove image background automatically",
+      "imageUrl": "http://94.131.92.240:8080/assets/onboarding/onboarding_2.png"
+    }
+  ]
+}

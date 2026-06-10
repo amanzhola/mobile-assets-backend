@@ -1,0 +1,15 @@
+build/
+cmake-build-*/
+.cache/
+
+storage/input/*
+storage/output/*
+
+*.o
+*.a
+*.so
+*.log
+
+.DS_Store
+.vscode/
+.idea/

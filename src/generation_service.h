@@ -1,0 +1,47 @@
+#pragma once
+
+#include <boost/json.hpp>
+
+#include <atomic>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+namespace generation {
+
+namespace json = boost::json;
+
+struct GenerationTask {
+    std::string task_id;
+    std::string server_action;
+    std::string tool_type;
+    std::string prompt;
+    std::string template_id;
+    int output_count = 1;
+    std::string status = "completed";
+    std::vector<std::string> result_image_urls;
+};
+
+class GenerationService {
+public:
+    json::object CreateGeneration(const json::object& request);
+    json::object GetTask(const std::string& task_id) const;
+    json::object GetResult(const std::string& task_id) const;
+    json::object Regenerate(const std::string& task_id);
+
+private:
+    std::string MakeTaskId();
+    bool IsKnownAction(const std::string& action) const;
+    std::string ChooseWorkflow(const std::string& action) const;
+    std::string MakeMockResultUrl(const std::string& action,
+                                  const std::string& task_id,
+                                  int index) const;
+
+    json::object TaskToJson(const GenerationTask& task) const;
+
+private:
+    std::atomic_uint64_t next_task_id_{1};
+    std::unordered_map<std::string, GenerationTask> tasks_;
+};
+
+}  // namespace generation
