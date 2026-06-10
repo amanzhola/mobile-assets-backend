@@ -1,5 +1,7 @@
 #include "api_handler.h"
 
+#include <fstream>
+#include <iterator>
 #include <string>
 
 namespace api {
@@ -65,6 +67,46 @@ http::response<http::string_body> ApiHandler::UploadImage(
         return JsonResponse(
             request,
             MakeError("upload_failed", e.what()),
+            http::status::bad_request
+        );
+    }
+}
+
+http::response<http::string_body> ApiHandler::ServeUploadedFile(
+    const http::request<http::string_body>& request,
+    const std::string& file_name
+) {
+    try {
+        const auto path = upload_service_.GetFilePath(file_name);
+
+        std::ifstream input(path, std::ios::binary);
+
+        if (!input.is_open()) {
+            return JsonResponse(
+                request,
+                MakeError("file_not_found", "Uploaded file not found"),
+                http::status::not_found
+            );
+        }
+
+        std::string body{
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>()
+        };
+
+        http::response<http::string_body> response{http::status::ok, request.version()};
+        response.set(http::field::content_type, upload_service_.GetContentTypeByFileName(file_name));
+        response.set(http::field::cache_control, "no-cache");
+        response.keep_alive(request.keep_alive());
+        response.body() = std::move(body);
+        response.prepare_payload();
+
+        return response;
+
+    } catch (const std::exception& e) {
+        return JsonResponse(
+            request,
+            MakeError("bad_upload_path", e.what()),
             http::status::bad_request
         );
     }
@@ -141,6 +183,15 @@ http::response<http::string_body> ApiHandler::Handle(
 
     if (request.method() == http::verb::post && target == "/images/upload") {
         return UploadImage(request);
+    }
+
+    constexpr std::string_view uploads_prefix = "/uploads/";
+
+    if (request.method() == http::verb::get && target.starts_with(uploads_prefix)) {
+        return ServeUploadedFile(
+            request,
+            target.substr(uploads_prefix.size())
+        );
     }
 
     if (request.method() == http::verb::post && target == "/generations") {

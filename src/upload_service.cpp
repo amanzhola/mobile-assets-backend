@@ -62,11 +62,44 @@ json::object UploadService::SaveRawImage(std::string body, std::string content_t
     json::object response;
     response["imageId"] = image_id;
     response["fileName"] = file_path.filename().string();
+    response["imageUrl"] = "/uploads/" + file_path.filename().string();
     response["path"] = file_path.string();
     response["contentType"] = content_type;
     response["size"] = body.size();
 
     return response;
+}
+
+std::filesystem::path UploadService::GetFilePath(const std::string& file_name) const {
+    if (file_name.find('/') != std::string::npos || file_name.find('\\') != std::string::npos) {
+        throw std::runtime_error("Invalid file name");
+    }
+
+    return input_dir_ / file_name;
+}
+
+std::string UploadService::GetContentTypeByFileName(const std::string& file_name) const {
+    if (file_name.ends_with(".png")) {
+        return "image/png";
+    }
+
+    if (file_name.ends_with(".jpg")) {
+        return "image/jpeg";
+    }
+
+    if (file_name.ends_with(".jpeg")) {
+        return "image/jpeg";
+    }
+
+    if (file_name.ends_with(".webp")) {
+        return "image/webp";
+    }
+
+    if (file_name.ends_with(".svg")) {
+        return "image/svg+xml";
+    }
+
+    return "application/octet-stream";
 }
 
 }  // namespace upload

@@ -39,6 +39,11 @@ private:
         const http::request<http::string_body>& request
     );
 
+    http::response<http::string_body> ServeUploadedFile(
+    	const http::request<http::string_body>& request,
+    	const std::string& file_name
+    );
+
 private:
     generation::GenerationService& generation_service_;
     catalog::CatalogService& catalog_service_;

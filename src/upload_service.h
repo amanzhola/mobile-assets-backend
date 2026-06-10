@@ -15,6 +15,9 @@ public:
 
     json::object SaveRawImage(std::string body, std::string content_type);
 
+    std::filesystem::path GetFilePath(const std::string& file_name) const;
+    std::string GetContentTypeByFileName(const std::string& file_name) const;
+
 private:
     std::string MakeImageId() const;
     std::string ExtensionFromContentType(const std::string& content_type) const;
