@@ -20,7 +20,10 @@ int main() {
 
         net::io_context ioc{1};
 
-        generation::GenerationService generation_service{fs::path{"../storage/tasks.json"}};
+        generation::GenerationService generation_service{
+    		fs::path{"../storage/tasks.json"},
+    		fs::path{"../data/templates.json"}
+	};
         catalog::CatalogService catalog_service{fs::path{"../data"}};
         upload::UploadService upload_service{fs::path{"../storage/input"}};
 

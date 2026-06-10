@@ -25,7 +25,8 @@ struct GenerationTask {
 
 class GenerationService {
 public:
-    explicit GenerationService(std::filesystem::path storage_file);
+    GenerationService(std::filesystem::path storage_file,
+                  std::filesystem::path templates_file);
 
     json::object CreateGeneration(const json::object& request);
     json::object GetTask(const std::string& task_id) const;
@@ -42,6 +43,7 @@ private:
     std::string MakeMockResultUrl(const std::string& action,
                                   const std::string& task_id,
                                   int index) const;
+    std::string FindTemplatePrompt(const std::string& template_id) const;
 
     json::object TaskToJson(const GenerationTask& task) const;
     GenerationTask TaskFromJson(const json::object& obj) const;
@@ -50,6 +52,7 @@ private:
     std::filesystem::path storage_file_;
     std::atomic_uint64_t next_task_id_{1};
     std::unordered_map<std::string, GenerationTask> tasks_;
+    std::filesystem::path templates_file_;
 };
 
 }  // namespace generation

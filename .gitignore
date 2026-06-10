@@ -1,4 +1,6 @@
 build/
+storage/
+*.tmp
 cmake-build-*/
 .cache/
 

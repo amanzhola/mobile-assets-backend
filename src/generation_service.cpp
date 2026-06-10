@@ -69,8 +69,10 @@ json::object MakeError(std::string code, std::string message) {
 
 }  // namespace
 
-GenerationService::GenerationService(std::filesystem::path storage_file)
-    : storage_file_{std::move(storage_file)} {
+GenerationService::GenerationService(std::filesystem::path storage_file,
+                                     std::filesystem::path templates_file)
+    : storage_file_{std::move(storage_file)}
+    , templates_file_{std::move(templates_file)} {
     LoadTasks();
 }
 
@@ -261,10 +263,51 @@ json::object GenerationService::TaskToJson(const GenerationTask& task) const {
     return obj;
 }
 
+std::string GenerationService::FindTemplatePrompt(const std::string& template_id) const {
+    std::ifstream input(templates_file_);
+
+    if (!input.is_open()) {
+        throw std::runtime_error("Failed to open templates file: " + templates_file_.string());
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+
+    json::value parsed = json::parse(buffer.str());
+
+    if (!parsed.is_object()) {
+        return {};
+    }
+
+    const json::object& root = parsed.as_object();
+
+    auto templates_it = root.find("templates");
+
+    if (templates_it == root.end() || !templates_it->value().is_array()) {
+        return {};
+    }
+
+    for (const auto& item : templates_it->value().as_array()) {
+        if (!item.is_object()) {
+            continue;
+        }
+
+        const json::object& obj = item.as_object();
+
+        const std::string id = ReadStringOrEmpty(obj, "id");
+
+        if (id == template_id) {
+            return ReadStringOrEmpty(obj, "prompt");
+        }
+    }
+
+    return {};
+}
+
 json::object GenerationService::CreateGeneration(const json::object& request) {
     const std::string server_action = ReadStringOrEmpty(request, "serverAction");
     const std::string tool_type = ReadStringOrEmpty(request, "toolType");
-    const std::string prompt = ReadStringOrEmpty(request, "prompt");
+    std::string prompt = ReadStringOrEmpty(request, "prompt");
     const std::string template_id = ReadStringOrEmpty(request, "templateId");
     const int output_count = ReadIntOrDefault(request, "outputCount", 1);
 
@@ -310,6 +353,14 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
 
     if (server_action == "template" && template_id.empty()) {
         return MakeError("missing_template_id", "template action requires templateId");
+    }
+
+    if (server_action == "template" && prompt.empty()) {
+        prompt = FindTemplatePrompt(template_id);
+
+        if (prompt.empty()) {
+            return MakeError("unknown_template_id", "Unknown templateId: " + template_id);
+        }
     }
 
     const std::string workflow = ChooseWorkflow(server_action);
