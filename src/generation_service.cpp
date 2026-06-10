@@ -1,14 +1,20 @@
 #include "generation_service.h"
 
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 namespace generation {
 
 namespace {
 
+boost::json::string_view ToJsonKey(std::string_view key) {
+    return boost::json::string_view(key.data(), key.size());
+}
+
 std::string ReadStringOrEmpty(const json::object& obj, std::string_view key) {
-    auto it = obj.find(json::string_view(key.data(), key.size()));
+    auto it = obj.find(ToJsonKey(key));
 
     if (it == obj.end() || !it->value().is_string()) {
         return {};
@@ -18,7 +24,7 @@ std::string ReadStringOrEmpty(const json::object& obj, std::string_view key) {
 }
 
 int ReadIntOrDefault(const json::object& obj, std::string_view key, int default_value) {
-    auto it = obj.find(json::string_view(key.data(), key.size()));
+    auto it = obj.find(ToJsonKey(key));
 
     if (it == obj.end()) {
         return default_value;
@@ -38,7 +44,7 @@ int ReadIntOrDefault(const json::object& obj, std::string_view key, int default_
 std::vector<std::string> ReadStringArray(const json::object& obj, std::string_view key) {
     std::vector<std::string> result;
 
-    auto it = obj.find(json::string_view(key.data(), key.size()));
+    auto it = obj.find(ToJsonKey(key));
 
     if (it == obj.end() || !it->value().is_array()) {
         return result;
@@ -62,6 +68,124 @@ json::object MakeError(std::string code, std::string message) {
 }
 
 }  // namespace
+
+GenerationService::GenerationService(std::filesystem::path storage_file)
+    : storage_file_{std::move(storage_file)} {
+    LoadTasks();
+}
+
+void GenerationService::LoadTasks() {
+    tasks_.clear();
+
+    if (!std::filesystem::exists(storage_file_)) {
+        return;
+    }
+
+    std::ifstream input(storage_file_);
+
+    if (!input.is_open()) {
+        return;
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+
+    if (buffer.str().empty()) {
+        return;
+    }
+
+    json::value parsed;
+
+    try {
+        parsed = json::parse(buffer.str());
+    } catch (...) {
+        return;
+    }
+
+    if (!parsed.is_object()) {
+        return;
+    }
+
+    const json::object& root = parsed.as_object();
+
+    if (auto it = root.find("nextTaskId"); it != root.end() && it->value().is_uint64()) {
+        next_task_id_ = static_cast<std::uint64_t>(it->value().as_uint64());
+    }
+
+    auto tasks_it = root.find("tasks");
+
+    if (tasks_it == root.end() || !tasks_it->value().is_array()) {
+        return;
+    }
+
+    for (const auto& task_value : tasks_it->value().as_array()) {
+        if (!task_value.is_object()) {
+            continue;
+        }
+
+        GenerationTask task = TaskFromJson(task_value.as_object());
+
+        if (!task.task_id.empty()) {
+            tasks_.emplace(task.task_id, std::move(task));
+        }
+    }
+}
+
+void GenerationService::SaveTasks() const {
+    std::filesystem::create_directories(storage_file_.parent_path());
+
+    json::array tasks_json;
+
+    for (const auto& [task_id, task] : tasks_) {
+        tasks_json.emplace_back(TaskToJson(task));
+    }
+
+    json::object root;
+    root["nextTaskId"] = next_task_id_.load();
+    root["tasks"] = std::move(tasks_json);
+
+    const auto temp_file = storage_file_.string() + ".tmp";
+
+    {
+        std::ofstream output(temp_file, std::ios::binary);
+
+        if (!output.is_open()) {
+            throw std::runtime_error("Failed to open task storage file");
+        }
+
+        output << json::serialize(root);
+    }
+
+    std::filesystem::rename(temp_file, storage_file_);
+}
+
+GenerationTask GenerationService::TaskFromJson(const json::object& obj) const {
+    GenerationTask task;
+
+    task.task_id = ReadStringOrEmpty(obj, "taskId");
+    task.status = ReadStringOrEmpty(obj, "status");
+    task.server_action = ReadStringOrEmpty(obj, "serverAction");
+    task.tool_type = ReadStringOrEmpty(obj, "toolType");
+    task.prompt = ReadStringOrEmpty(obj, "prompt");
+    task.template_id = ReadStringOrEmpty(obj, "templateId");
+    task.output_count = ReadIntOrDefault(obj, "outputCount", 1);
+
+    if (task.status.empty()) {
+        task.status = "completed";
+    }
+
+    auto urls_it = obj.find("resultImageUrls");
+
+    if (urls_it != obj.end() && urls_it->value().is_array()) {
+        for (const auto& url_value : urls_it->value().as_array()) {
+            if (url_value.is_string()) {
+                task.result_image_urls.push_back(std::string(url_value.as_string()));
+            }
+        }
+    }
+
+    return task;
+}
 
 std::string GenerationService::MakeTaskId() {
     return "mock_task_" + std::to_string(next_task_id_++);
@@ -96,6 +220,10 @@ bool GenerationService::IsKnownAction(const std::string& action) const {
 std::string GenerationService::ChooseWorkflow(const std::string& action) const {
     if (!IsKnownAction(action)) {
         throw std::runtime_error("Unknown serverAction: " + action);
+    }
+
+    if (action == "template") {
+        return "workflows/template.json";
     }
 
     return "workflows/" + action + ".json";
@@ -212,6 +340,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
         << std::endl;
 
     tasks_.emplace(task_id, task);
+    SaveTasks();
 
     json::object response = TaskToJson(task);
     response["workflow"] = workflow;
@@ -268,6 +397,7 @@ json::object GenerationService::Regenerate(const std::string& task_id) {
     }
 
     tasks_.emplace(new_task.task_id, new_task);
+    SaveTasks();
 
     return TaskToJson(new_task);
 }

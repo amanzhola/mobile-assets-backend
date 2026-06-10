@@ -3,6 +3,7 @@
 #include <boost/json.hpp>
 
 #include <atomic>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -24,12 +25,17 @@ struct GenerationTask {
 
 class GenerationService {
 public:
+    explicit GenerationService(std::filesystem::path storage_file);
+
     json::object CreateGeneration(const json::object& request);
     json::object GetTask(const std::string& task_id) const;
     json::object GetResult(const std::string& task_id) const;
     json::object Regenerate(const std::string& task_id);
 
 private:
+    void LoadTasks();
+    void SaveTasks() const;
+
     std::string MakeTaskId();
     bool IsKnownAction(const std::string& action) const;
     std::string ChooseWorkflow(const std::string& action) const;
@@ -38,8 +44,10 @@ private:
                                   int index) const;
 
     json::object TaskToJson(const GenerationTask& task) const;
+    GenerationTask TaskFromJson(const json::object& obj) const;
 
 private:
+    std::filesystem::path storage_file_;
     std::atomic_uint64_t next_task_id_{1};
     std::unordered_map<std::string, GenerationTask> tasks_;
 };

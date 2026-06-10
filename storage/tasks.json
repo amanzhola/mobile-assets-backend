@@ -1,0 +1,1 @@
+{"nextTaskId":2,"tasks":[{"taskId":"mock_task_1","status":"completed","serverAction":"ghibli","toolType":"GHIBLI","prompt":"Transform image into anime inspired look","templateId":null,"outputCount":2,"resultImageUrls":["https://mock.pixo.ai/results/ghibli_mock_task_1_1.webp","https://mock.pixo.ai/results/ghibli_mock_task_1_2.webp"]}]}
