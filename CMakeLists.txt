@@ -18,6 +18,8 @@ add_executable(mobile_assets_backend
     src/api_handler.h
     src/generation_service.cpp
     src/generation_service.h
+    src/catalog_service.cpp
+    src/catalog_service.h
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE

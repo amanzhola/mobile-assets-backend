@@ -21,8 +21,10 @@ bool IsError(const json::object& obj) {
 
 }  // namespace
 
-ApiHandler::ApiHandler(generation::GenerationService& generation_service)
-    : generation_service_{generation_service} {
+ApiHandler::ApiHandler(generation::GenerationService& generation_service,
+                       catalog::CatalogService& catalog_service)
+    : generation_service_{generation_service}
+    , catalog_service_{catalog_service} {
 }
 
 http::response<http::string_body> ApiHandler::JsonResponse(
@@ -83,6 +85,30 @@ http::response<http::string_body> ApiHandler::Handle(
         body["service"] = "mobile_assets_backend";
 
         return JsonResponse(request, std::move(body));
+    }
+
+    if (request.method() == http::verb::get && target == "/tools") {
+        try {
+            return JsonResponse(request, catalog_service_.GetTools());
+        } catch (const std::exception& e) {
+            return JsonResponse(
+                request,
+                MakeError("catalog_error", e.what()),
+                http::status::internal_server_error
+            );
+        }
+    }
+
+    if (request.method() == http::verb::get && target == "/templates") {
+        try {
+            return JsonResponse(request, catalog_service_.GetTemplates());
+        } catch (const std::exception& e) {
+            return JsonResponse(
+                request,
+                MakeError("catalog_error", e.what()),
+                http::status::internal_server_error
+            );
+        }
     }
 
     if (request.method() == http::verb::post && target == "/generations") {

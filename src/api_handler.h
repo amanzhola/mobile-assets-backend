@@ -1,5 +1,6 @@
 #pragma once
 
+#include "catalog_service.h"
 #include "generation_service.h"
 
 #include <boost/beast.hpp>
@@ -13,7 +14,8 @@ namespace json = boost::json;
 
 class ApiHandler {
 public:
-    explicit ApiHandler(generation::GenerationService& generation_service);
+    ApiHandler(generation::GenerationService& generation_service,
+               catalog::CatalogService& catalog_service);
 
     http::response<http::string_body> Handle(
         const http::request<http::string_body>& request
@@ -32,6 +34,7 @@ private:
 
 private:
     generation::GenerationService& generation_service_;
+    catalog::CatalogService& catalog_service_;
 };
 
 }  // namespace api

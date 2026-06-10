@@ -1,0 +1,28 @@
+{
+  "templates": [
+    {"id":"gloria_model","title":"Gloria Model","prompt":"High fashion editorial portrait, luxury model style, elegant pose, cinematic lighting."},
+    {"id":"cherry","title":"Cherry","prompt":"Cherry red beauty editorial, glossy lips, soft studio lighting, fashionable portrait."},
+    {"id":"travel_style","title":"Travel Style","prompt":"Stylish travel lifestyle photo, sunny destination, cinematic vacation mood."},
+    {"id":"one_love","title":"One Love","prompt":"Romantic warm portrait, soft light, dreamy love story atmosphere."},
+    {"id":"warm_day","title":"Warm Day","prompt":"Warm sunny day portrait, golden light, soft natural colors."},
+    {"id":"pink_captivity","title":"Pink Captivity","prompt":"Pink fashion editorial, soft glam, dreamy pink background, elegant beauty style."},
+    {"id":"80s_gloss","title":"80s Gloss","prompt":"1980s glossy magazine style, retro glam makeup, vibrant studio lighting."},
+    {"id":"match_point","title":"Match Point","prompt":"Sporty tennis fashion portrait, clean athletic style, premium editorial look."},
+    {"id":"japan_breathe","title":"Japan Breathe","prompt":"Japanese inspired calm portrait, minimal background, soft cinematic atmosphere."},
+    {"id":"easter_morning","title":"Easter Morning","prompt":"Fresh spring morning portrait, pastel colors, soft flowers, gentle light."},
+    {"id":"sea_breathe","title":"Sea Breathe","prompt":"Sea breeze lifestyle portrait, ocean background, natural light, relaxed mood."},
+    {"id":"blossom","title":"Blossom","prompt":"Flower blossom portrait, soft petals, spring fashion, dreamy colors."},
+    {"id":"darning_noir","title":"Darning Noir","prompt":"Dark noir fashion portrait, dramatic shadows, elegant cinematic lighting."},
+    {"id":"love_in_paris","title":"Love in Paris","prompt":"Romantic Paris portrait, elegant outfit, cinematic street background."},
+    {"id":"queen_of_the_day","title":"Queen of the Day","prompt":"Royal beauty portrait, confident elegant pose, luxury editorial lighting."},
+    {"id":"old_money_muse","title":"Old Money Muse","prompt":"Old money aesthetic portrait, quiet luxury outfit, elegant natural colors."},
+    {"id":"sport_and_healthy","title":"Sport and Healthy","prompt":"Healthy sporty lifestyle portrait, clean fitness look, bright natural light."},
+    {"id":"rapunzel_glow","title":"Rapunzel Glow","prompt":"Long glowing hair fairytale portrait, golden light, magical soft atmosphere."},
+    {"id":"safary","title":"Safary","prompt":"Safari fashion portrait, warm desert tones, adventurous luxury style."},
+    {"id":"housewives","title":"Housewives","prompt":"Retro housewife editorial look, polished style, colorful vintage atmosphere."},
+    {"id":"morning_routine","title":"Morning Routine","prompt":"Cozy morning routine portrait, soft home light, natural beauty style."},
+    {"id":"oscar","title":"Oscar","prompt":"Red carpet Oscar night portrait, luxury dress, cinematic flash photography."},
+    {"id":"retro_style","title":"Retro Style","prompt":"Retro fashion portrait, vintage colors, stylish old-school editorial look."},
+    {"id":"metro_style","title":"Metro Style","prompt":"Urban metro fashion portrait, city mood, modern stylish editorial lighting."}
+  ]
+}

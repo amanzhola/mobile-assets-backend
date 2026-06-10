@@ -1,0 +1,15 @@
+{
+  "tools": [
+    {"id":"ai_enhancer","title":"AI Enhancer","serverAction":"ai_enhancer","defaultPrompt":"Enhance image quality, improve details, sharpness and natural lighting.","tokenCost":2,"maxOutputCount":4},
+    {"id":"glam_makeup","title":"Glam Makeup","serverAction":"glam_makeup","defaultPrompt":"Apply natural makeup, soft blush, nude lipstick, realistic skin texture.","tokenCost":2,"maxOutputCount":4},
+    {"id":"remove_objects","title":"Remove Objects","serverAction":"remove_objects","defaultPrompt":"Remove selected object naturally and fill the background.","tokenCost":2,"maxOutputCount":4},
+    {"id":"remove_background","title":"Remove Background","serverAction":"remove_background","defaultPrompt":"Remove image background and keep the main subject clean.","tokenCost":2,"maxOutputCount":4},
+    {"id":"skin_improve","title":"Skin Improve","serverAction":"skin_improve","defaultPrompt":"Smooth skin, reduce blemishes, and keep natural texture.","tokenCost":2,"maxOutputCount":4},
+    {"id":"upscale_image","title":"Upscale Image","serverAction":"upscale_image","defaultPrompt":"Restore sharpness, clarity, and fine details while keeping the result natural.","tokenCost":2,"maxOutputCount":4},
+    {"id":"change_scene","title":"Change Scene","serverAction":"change_scene","defaultPrompt":"Replace the background scene naturally.","tokenCost":2,"maxOutputCount":4},
+    {"id":"hair_studio","title":"Hair Studio","serverAction":"hair_studio","defaultPrompt":"Change hairstyle naturally with realistic hair texture.","tokenCost":2,"maxOutputCount":4},
+    {"id":"smile_edit","title":"Smile Edit","serverAction":"smile_edit","defaultPrompt":"Improve smile naturally, natural teeth whitening.","tokenCost":2,"maxOutputCount":4},
+    {"id":"ghostface","title":"Ghostface","serverAction":"ghostface","defaultPrompt":"Transform your photo into a spooky Ghost Face-inspired scene.","tokenCost":2,"maxOutputCount":4},
+    {"id":"ghibli","title":"Ghibli Look","serverAction":"ghibli","defaultPrompt":"Transform the image into a soft dreamy hand-drawn anime-inspired look with warm pastel colors and delicate outlines.","tokenCost":2,"maxOutputCount":4}
+  ]
+}

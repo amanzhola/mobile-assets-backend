@@ -1,13 +1,16 @@
 #include "api_handler.h"
+#include "catalog_service.h"
 #include "generation_service.h"
 #include "http_server.h"
 
 #include <boost/asio.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 
 namespace net = boost::asio;
+namespace fs = std::filesystem;
 
 int main() {
     try {
@@ -17,7 +20,12 @@ int main() {
         net::io_context ioc{1};
 
         generation::GenerationService generation_service;
-        api::ApiHandler api_handler{generation_service};
+        catalog::CatalogService catalog_service{fs::path{"../data"}};
+
+        api::ApiHandler api_handler{
+            generation_service,
+            catalog_service
+        };
 
         http_server::HttpServer server{
             ioc,
