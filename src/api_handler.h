@@ -6,6 +6,8 @@
 #include <boost/beast.hpp>
 #include <boost/json.hpp>
 
+#include "upload_service.h"
+
 namespace api {
 
 namespace beast = boost::beast;
@@ -15,10 +17,15 @@ namespace json = boost::json;
 class ApiHandler {
 public:
     ApiHandler(generation::GenerationService& generation_service,
-               catalog::CatalogService& catalog_service);
+               catalog::CatalogService& catalog_service,
+	       upload::UploadService& upload_service);
 
     http::response<http::string_body> Handle(
         const http::request<http::string_body>& request
+    );
+
+    http::response<http::string_body> UploadImage(
+    	const http::request<http::string_body>& request
     );
 
 private:
@@ -35,6 +42,7 @@ private:
 private:
     generation::GenerationService& generation_service_;
     catalog::CatalogService& catalog_service_;
+    upload::UploadService& upload_service_;
 };
 
 }  // namespace api

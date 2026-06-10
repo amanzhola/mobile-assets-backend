@@ -20,6 +20,8 @@ add_executable(mobile_assets_backend
     src/generation_service.h
     src/catalog_service.cpp
     src/catalog_service.h
+    src/upload_service.cpp
+    src/upload_service.h
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE

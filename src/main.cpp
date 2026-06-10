@@ -2,6 +2,7 @@
 #include "catalog_service.h"
 #include "generation_service.h"
 #include "http_server.h"
+#include "upload_service.h"
 
 #include <boost/asio.hpp>
 
@@ -21,10 +22,12 @@ int main() {
 
         generation::GenerationService generation_service;
         catalog::CatalogService catalog_service{fs::path{"../data"}};
+        upload::UploadService upload_service{fs::path{"../storage/input"}};
 
         api::ApiHandler api_handler{
             generation_service,
-            catalog_service
+            catalog_service,
+            upload_service
         };
 
         http_server::HttpServer server{

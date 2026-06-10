@@ -22,9 +22,11 @@ bool IsError(const json::object& obj) {
 }  // namespace
 
 ApiHandler::ApiHandler(generation::GenerationService& generation_service,
-                       catalog::CatalogService& catalog_service)
+                       catalog::CatalogService& catalog_service,
+                       upload::UploadService& upload_service)
     : generation_service_{generation_service}
-    , catalog_service_{catalog_service} {
+    , catalog_service_{catalog_service}
+    , upload_service_{upload_service} {
 }
 
 http::response<http::string_body> ApiHandler::JsonResponse(
@@ -40,6 +42,32 @@ http::response<http::string_body> ApiHandler::JsonResponse(
     response.prepare_payload();
 
     return response;
+}
+
+http::response<http::string_body> ApiHandler::UploadImage(
+    const http::request<http::string_body>& request
+) {
+    try {
+        auto content_type_it = request.find(http::field::content_type);
+
+        std::string content_type = content_type_it == request.end()
+            ? "application/octet-stream"
+            : std::string(content_type_it->value());
+
+        json::object result = upload_service_.SaveRawImage(
+            request.body(),
+            std::move(content_type)
+        );
+
+        return JsonResponse(request, std::move(result));
+
+    } catch (const std::exception& e) {
+        return JsonResponse(
+            request,
+            MakeError("upload_failed", e.what()),
+            http::status::bad_request
+        );
+    }
 }
 
 http::response<http::string_body> ApiHandler::CreateGeneration(
@@ -109,6 +137,10 @@ http::response<http::string_body> ApiHandler::Handle(
                 http::status::internal_server_error
             );
         }
+    }
+
+    if (request.method() == http::verb::post && target == "/images/upload") {
+        return UploadImage(request);
     }
 
     if (request.method() == http::verb::post && target == "/generations") {
