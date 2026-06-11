@@ -59,6 +59,22 @@ std::vector<std::string> ReadStringArray(const json::object& obj, std::string_vi
     return result;
 }
 
+std::string ReadFirstInputImageUrl(const json::object& request) {
+    std::string source_image_url = ReadStringOrEmpty(request, "sourceImageUrl");
+
+    if (!source_image_url.empty()) {
+        return source_image_url;
+    }
+
+    auto uploaded_urls = ReadStringArray(request, "uploadedImageUrls");
+
+    if (!uploaded_urls.empty()) {
+        return uploaded_urls.front();
+    }
+
+    return {};
+}
+
 json::object MakeError(std::string code, std::string message) {
     json::object obj;
     obj["error"] = true;
@@ -325,6 +341,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
 
     const auto source_image_uris = ReadStringArray(request, "sourceImageUris");
     const auto uploaded_image_ids = ReadStringArray(request, "uploadedImageIds");
+    const std::string first_input_image_url = ReadFirstInputImageUrl(request);
     const std::string source_image_uri = ReadStringOrEmpty(request, "sourceImageUri");
 
     int image_count = 0;
@@ -375,7 +392,11 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     task.output_count = output_count;
 
     for (int i = 1; i <= output_count; ++i) {
-        task.result_image_urls.push_back(MakeMockResultUrl(server_action, task_id, i));
+        if (!first_input_image_url.empty() && first_input_image_url.starts_with("/uploads/")) {
+            task.result_image_urls.push_back(first_input_image_url);
+        } else {
+            task.result_image_urls.push_back(MakeMockResultUrl(server_action, task_id, i));
+        }
     }
 
     std::cout
