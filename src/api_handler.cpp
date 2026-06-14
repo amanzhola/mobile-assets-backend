@@ -5,6 +5,7 @@
 #include <string>
 #include <filesystem>
 #include <cstdlib>
+#include <chrono>
 
 namespace api {
 
@@ -285,71 +286,119 @@ http::response<http::string_body> ApiHandler::Handle(
 
 	if (request.method() == http::verb::post && target == "/comfy/test-prompt-result") {
 	    json::object body;
-
+	
 	    try {
-	        json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
-	            "pixo_test.jpg",
-	            "pixo_test_output"
-	        );
-
-	        auto prompt_id = comfy_client_.QueuePrompt(workflow);
-
-	        if (!prompt_id) {
+	        const char* home_env = std::getenv("HOME");
+	
+	        if (home_env == nullptr) {
 	            body["ok"] = false;
-	            body["message"] = "Failed to queue ComfyUI prompt";
-
+	            body["message"] = "HOME environment variable is not set";
+	
 	            return JsonResponse(
 	                request,
 	                std::move(body),
 	                http::status::bad_request
 	            );
 	        }
-
-	        auto output_file_name = comfy_client_.WaitForFirstOutputFile(*prompt_id);
-
+	
+	        const std::string output_prefix =
+	            "pixo_test_output_" + std::to_string(
+	                std::chrono::steady_clock::now()
+	                    .time_since_epoch()
+	                    .count()
+	            );
+	
+	        json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
+	            "pixo_test.jpg",
+	            output_prefix
+	        );
+	
+	        auto prompt_id = comfy_client_.QueuePrompt(workflow);
+	
+	        if (!prompt_id) {
+	            body["ok"] = false;
+	            body["message"] = "Failed to queue ComfyUI prompt";
+	
+	            return JsonResponse(
+	                request,
+	                std::move(body),
+	                http::status::bad_request
+	            );
+	        }
+	
+	        auto output_file_name = comfy_client_.WaitForFirstOutputFile(
+	            *prompt_id,
+	            240,
+	            1000
+	        );
+	
+	        if (!output_file_name) {
+	            const fs::path comfy_output_dir =
+	                fs::path{home_env} / "ComfyUI" / "output";
+	
+	            if (fs::exists(comfy_output_dir)) {
+	                fs::path newest_file;
+	                fs::file_time_type newest_time{};
+	                bool found = false;
+	
+	                for (const auto& entry : fs::directory_iterator(comfy_output_dir)) {
+	                    if (!entry.is_regular_file()) {
+	                        continue;
+	                    }
+	
+	                    const std::string file_name =
+	                        entry.path().filename().string();
+	
+	                    if (!file_name.starts_with(output_prefix)) {
+	                        continue;
+	                    }
+	
+	                    const auto modified_time =
+	                        fs::last_write_time(entry.path());
+	
+	                    if (!found || modified_time > newest_time) {
+	                        found = true;
+	                        newest_time = modified_time;
+	                        newest_file = entry.path();
+	                    }
+	                }
+	
+	                if (found) {
+	                    output_file_name = newest_file.filename().string();
+	                }
+	            }
+	        }
+	
 	        if (!output_file_name) {
 	            body["ok"] = false;
 	            body["promptId"] = *prompt_id;
 	            body["message"] = "ComfyUI output was not found";
-
+	
 	            return JsonResponse(
 	                request,
 	                std::move(body),
 	                http::status::bad_request
 	            );
 	        }
-
-	        const char* home_env = std::getenv("HOME");
-
-	        if (home_env == nullptr) {
-	            body["ok"] = false;
-	            body["message"] = "HOME environment variable is not set";
-
-	            return JsonResponse(
-	                request,
-	                std::move(body),
-	                http::status::bad_request
-	            );
-	        }
-
+	
 	        const fs::path comfy_output_file =
 	            fs::path{home_env} / "ComfyUI" / "output" / *output_file_name;
-
+	
 	        const fs::path saved_file =
 	            output_service_.SaveFromComfyOutput(comfy_output_file);
-
+	
 	        body["ok"] = true;
 	        body["promptId"] = *prompt_id;
 	        body["outputFile"] = saved_file.filename().string();
 	        body["outputUrl"] =
 	            output_service_.GetPublicUrl(saved_file.filename().string());
-
+	
 	        return JsonResponse(request, std::move(body));
-
+	
 	    } catch (const std::exception& e) {
 	        body["ok"] = false;
 	        body["message"] = e.what();
-
+	
 	        return JsonResponse(
 	            request,
 	            std::move(body),

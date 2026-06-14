@@ -1,14 +1,16 @@
 #include "generation_service.h"
 
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
-
-#include <chrono>
-#include <filesystem>
-#include <cstdlib>
-#include <algorithm>
+#include <thread>
 #include <vector>
 
 namespace generation {
@@ -31,19 +33,15 @@ std::string ReadStringOrEmpty(const json::object& obj, std::string_view key) {
     return std::string(it->value().as_string());
 }
 
-
 std::string ReadTemplateId(const json::object& obj) {
-    if (auto it = obj.find("templateId"); it != obj.end()
-        && it->value().is_string()) {
+    if (auto it = obj.find("templateId"); it != obj.end() && it->value().is_string()) {
         return std::string(it->value().as_string());
     }
 
-    if (auto options_it = obj.find("options"); options_it != obj.end()
-        && options_it->value().is_object()) {
+    if (auto options_it = obj.find("options"); options_it != obj.end() && options_it->value().is_object()) {
         const auto& options = options_it->value().as_object();
 
-        if (auto template_it = options.find("templateId"); template_it != options.end()
-            && template_it->value().is_string()) {
+        if (auto template_it = options.find("templateId"); template_it != options.end() && template_it->value().is_string()) {
             return std::string(template_it->value().as_string());
         }
     }
@@ -111,9 +109,7 @@ json::object MakeError(std::string code, std::string message) {
     return obj;
 }
 
-std::optional<std::string> ExtractFileNameFromUploadUrl(
-    const std::string& raw_url
-) {
+std::optional<std::string> ExtractFileNameFromUploadUrl(const std::string& raw_url) {
     std::string url = raw_url;
 
     const auto query_pos = url.find('?');
@@ -135,10 +131,7 @@ std::optional<std::string> ExtractFileNameFromUploadUrl(
         return std::nullopt;
     }
 
-    if (
-        file_name.find('/') != std::string::npos ||
-        file_name.find('\\') != std::string::npos
-    ) {
+    if (file_name.find('/') != std::string::npos || file_name.find('\\') != std::string::npos) {
         return std::nullopt;
     }
 
@@ -171,7 +164,7 @@ GenerationService::GenerationService(
 void GenerationService::LoadTasks() {
     tasks_.clear();
 
-    if (!std::filesystem::exists(storage_file_)) {
+    if (!fs::exists(storage_file_)) {
         return;
     }
 
@@ -226,7 +219,7 @@ void GenerationService::LoadTasks() {
 }
 
 void GenerationService::SaveTasks() const {
-    std::filesystem::create_directories(storage_file_.parent_path());
+    fs::create_directories(storage_file_.parent_path());
 
     json::array tasks_json;
 
@@ -250,7 +243,7 @@ void GenerationService::SaveTasks() const {
         output << json::serialize(root);
     }
 
-    std::filesystem::rename(temp_file, storage_file_);
+    fs::rename(temp_file, storage_file_);
 }
 
 GenerationTask GenerationService::TaskFromJson(const json::object& obj) const {
@@ -281,6 +274,28 @@ GenerationTask GenerationService::TaskFromJson(const json::object& obj) const {
     return task;
 }
 
+json::object GenerationService::TaskToJson(const GenerationTask& task) const {
+    json::array urls;
+
+    for (const auto& url : task.result_image_urls) {
+        urls.emplace_back(url);
+    }
+
+    json::object obj;
+    obj["taskId"] = task.task_id;
+    obj["status"] = task.status;
+    obj["serverAction"] = task.server_action;
+    obj["toolType"] = task.tool_type;
+    obj["prompt"] = task.prompt;
+    obj["templateId"] = task.template_id.empty()
+        ? json::value(nullptr)
+        : json::value(task.template_id);
+    obj["outputCount"] = task.output_count;
+    obj["resultImageUrls"] = std::move(urls);
+
+    return obj;
+}
+
 std::string GenerationService::MakeTaskId() {
     return "mock_task_" + std::to_string(
         std::chrono::steady_clock::now()
@@ -306,13 +321,7 @@ bool GenerationService::IsKnownAction(const std::string& action) const {
         "prompt"
     };
 
-    for (const auto& item : actions) {
-        if (item == action) {
-            return true;
-        }
-    }
-
-    return false;
+    return std::find(actions.begin(), actions.end(), action) != actions.end();
 }
 
 std::string GenerationService::ChooseWorkflow(const std::string& action) const {
@@ -320,43 +329,19 @@ std::string GenerationService::ChooseWorkflow(const std::string& action) const {
         throw std::runtime_error("Unknown serverAction: " + action);
     }
 
-    if (action == "template") {
-        return "workflows/template.json";
-    }
-
     return "workflows/" + action + ".json";
 }
 
-std::string GenerationService::MakeMockResultUrl(const std::string& action,
-                                                 const std::string& task_id,
-                                                 int index) const {
+std::string GenerationService::MakeMockResultUrl(
+    const std::string& action,
+    const std::string& task_id,
+    int index
+) const {
     return "https://mock.pixo.ai/results/"
         + action + "_"
         + task_id + "_"
         + std::to_string(index)
         + ".webp";
-}
-
-json::object GenerationService::TaskToJson(const GenerationTask& task) const {
-    json::array urls;
-
-    for (const auto& url : task.result_image_urls) {
-        urls.emplace_back(url);
-    }
-
-    json::object obj;
-    obj["taskId"] = task.task_id;
-    obj["status"] = task.status;
-    obj["serverAction"] = task.server_action;
-    obj["toolType"] = task.tool_type;
-    obj["prompt"] = task.prompt;
-    obj["templateId"] = task.template_id.empty()
-        ? json::value(nullptr)
-        : json::value(task.template_id);
-    obj["outputCount"] = task.output_count;
-    obj["resultImageUrls"] = std::move(urls);
-
-    return obj;
 }
 
 std::string GenerationService::FindTemplatePrompt(const std::string& template_id) const {
@@ -389,7 +374,6 @@ std::string GenerationService::FindTemplatePrompt(const std::string& template_id
         }
 
         const json::object& obj = item.as_object();
-
         const std::string id = ReadStringOrEmpty(obj, "id");
 
         if (id == template_id) {
@@ -448,6 +432,49 @@ std::vector<std::string> GenerationService::ExtractUploadedFileNames(
     return result;
 }
 
+std::optional<std::string> GenerationService::FindNewestComfyOutputByPrefix(
+    const std::string& output_prefix
+) const {
+    try {
+        if (!fs::exists(comfy_output_dir_)) {
+            return std::nullopt;
+        }
+
+        fs::path newest_file;
+        fs::file_time_type newest_time{};
+        bool found = false;
+
+        for (const auto& entry : fs::directory_iterator(comfy_output_dir_)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+
+            const std::string file_name = entry.path().filename().string();
+
+            if (!file_name.starts_with(output_prefix)) {
+                continue;
+            }
+
+            const auto modified_time = fs::last_write_time(entry.path());
+
+            if (!found || modified_time > newest_time) {
+                found = true;
+                newest_time = modified_time;
+                newest_file = entry.path();
+            }
+        }
+
+        if (!found) {
+            return std::nullopt;
+        }
+
+        return newest_file.filename().string();
+
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::optional<std::string> GenerationService::RunSingleImageViaComfy(
     const std::string& input_file_name,
     const std::string& task_id,
@@ -457,11 +484,8 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
     try {
         fs::create_directories(comfy_input_dir_);
 
-        const fs::path backend_input_file =
-            backend_input_dir_ / input_file_name;
-
-        const fs::path comfy_input_file =
-            comfy_input_dir_ / input_file_name;
+        const fs::path backend_input_file = backend_input_dir_ / input_file_name;
+        const fs::path comfy_input_file = comfy_input_dir_ / input_file_name;
 
         if (!fs::exists(backend_input_file)) {
             return std::nullopt;
@@ -474,8 +498,7 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
         );
 
         const std::string output_prefix =
-            "pixo_" + server_action + "_" + task_id + "_" +
-            std::to_string(image_index);
+            "pixo_" + server_action + "_" + task_id + "_" + std::to_string(image_index);
 
         json::object workflow = workflow_builder_.BuildWorkflow(
             server_action,
@@ -489,18 +512,22 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             return std::nullopt;
         }
 
-        auto comfy_output_file_name =
-            comfy_client_.WaitForFirstOutputFile(*prompt_id);
+        auto comfy_output_file_name = comfy_client_.WaitForFirstOutputFile(
+            *prompt_id,
+            240,
+            1000
+        );
+
+        if (!comfy_output_file_name) {
+            comfy_output_file_name = FindNewestComfyOutputByPrefix(output_prefix);
+        }
 
         if (!comfy_output_file_name) {
             return std::nullopt;
         }
 
-        const fs::path comfy_output_file =
-            comfy_output_dir_ / *comfy_output_file_name;
-
-        const fs::path saved_output_file =
-            output_service_.SaveFromComfyOutput(comfy_output_file);
+        const fs::path comfy_output_file = comfy_output_dir_ / *comfy_output_file_name;
+        const fs::path saved_output_file = output_service_.SaveFromComfyOutput(comfy_output_file);
 
         return output_service_.GetPublicUrl(
             saved_output_file.filename().string()
@@ -519,8 +546,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 ) {
     std::vector<std::string> result_urls;
 
-    const std::vector<std::string> input_file_names =
-        ExtractUploadedFileNames(request);
+    const std::vector<std::string> input_file_names = ExtractUploadedFileNames(request);
 
     if (input_file_names.empty()) {
         return result_urls;
@@ -558,14 +584,96 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
         result_urls.push_back(*output_url);
     }
 
-    while (
-        !result_urls.empty() &&
-        static_cast<int>(result_urls.size()) < output_count
-    ) {
+    while (!result_urls.empty() && static_cast<int>(result_urls.size()) < output_count) {
         result_urls.push_back(result_urls.front());
     }
 
     return result_urls;
+}
+
+void GenerationService::StartComfyGenerationInBackground(
+    json::object request,
+    std::string task_id,
+    std::string server_action,
+    int output_count,
+    std::string fallback_image_url
+) {
+    std::thread{
+        [this,
+         request = std::move(request),
+         task_id = std::move(task_id),
+         server_action = std::move(server_action),
+         fallback_image_url = std::move(fallback_image_url),
+         output_count]() mutable {
+            std::vector<std::string> result_urls = RunGenerationViaComfy(
+                request,
+                task_id,
+                server_action,
+                output_count
+            );
+
+            if (!result_urls.empty()) {
+                CompleteTaskWithResults(task_id, result_urls);
+            } else {
+                FailTaskWithFallback(task_id, fallback_image_url, output_count);
+            }
+        }
+    }.detach();
+}
+
+void GenerationService::CompleteTaskWithResults(
+    const std::string& task_id,
+    const std::vector<std::string>& result_urls
+) {
+    std::lock_guard<std::mutex> lock(tasks_mutex_);
+
+    auto it = tasks_.find(task_id);
+
+    if (it == tasks_.end()) {
+        return;
+    }
+
+    it->second.status = "completed";
+    it->second.result_image_urls = result_urls;
+
+    while (
+        !it->second.result_image_urls.empty() &&
+        static_cast<int>(it->second.result_image_urls.size()) < it->second.output_count
+    ) {
+        it->second.result_image_urls.push_back(it->second.result_image_urls.front());
+    }
+
+    SaveTasks();
+}
+
+void GenerationService::FailTaskWithFallback(
+    const std::string& task_id,
+    const std::string& fallback_image_url,
+    int output_count
+) {
+    std::lock_guard<std::mutex> lock(tasks_mutex_);
+
+    auto it = tasks_.find(task_id);
+
+    if (it == tasks_.end()) {
+        return;
+    }
+
+    it->second.status = "completed";
+
+    if (!fallback_image_url.empty()) {
+        it->second.result_image_urls = {fallback_image_url};
+    } else {
+        it->second.result_image_urls = {
+            MakeMockResultUrl(it->second.server_action, task_id, 1)
+        };
+    }
+
+    while (static_cast<int>(it->second.result_image_urls.size()) < output_count) {
+        it->second.result_image_urls.push_back(it->second.result_image_urls.front());
+    }
+
+    SaveTasks();
 }
 
 json::object GenerationService::CreateGeneration(const json::object& request) {
@@ -623,23 +731,23 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     }
 
     if (server_action == "template") {
-    	template_id = ReadTemplateId(request);
+        template_id = ReadTemplateId(request);
 
-    	if (template_id.empty()) {
+        if (template_id.empty()) {
             return MakeError(
-            	"missing_template_id",
-            	"templateId is required for template generation"
+                "missing_template_id",
+                "templateId is required for template generation"
             );
-    	}
+        }
 
-    	prompt = FindTemplatePrompt(template_id);
+        prompt = FindTemplatePrompt(template_id);
 
-    	if (prompt.empty()) {
+        if (prompt.empty()) {
             return MakeError(
-            	"unknown_template_id",
-            	"Unknown templateId: " + template_id
+                "unknown_template_id",
+                "Unknown templateId: " + template_id
             );
-   	}
+        }
     }
 
     const std::string workflow = ChooseWorkflow(server_action);
@@ -652,31 +760,14 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     task.prompt = prompt;
     task.template_id = template_id;
     task.output_count = output_count;
+    task.status = "processing";
+    task.result_image_urls.clear();
 
-    std::vector<std::string> comfy_result_urls = RunGenerationViaComfy(
-	    request,
-	    task_id,
-	    server_action,
-	    output_count
-	);
-	
-	if (!comfy_result_urls.empty()) {
-	    for (const std::string& url : comfy_result_urls) {
-	        task.result_image_urls.push_back(url);
-	    }
-	} else if (!first_input_image_url.empty()) {
-	    task.result_image_urls.push_back(first_input_image_url);
-	} else {
-	    task.result_image_urls.push_back(
-	        MakeMockResultUrl(server_action, task_id, 1)
-	    );
-	}
-	
-	while (static_cast<int>(task.result_image_urls.size()) < output_count) {
-	    task.result_image_urls.push_back(
-	        task.result_image_urls.front()
-	    );
-	}
+    {
+        std::lock_guard<std::mutex> lock(tasks_mutex_);
+        tasks_.emplace(task_id, task);
+        SaveTasks();
+    }
 
     std::cout
         << "[CREATE_GENERATION]\n"
@@ -689,10 +780,16 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
         << "templateId=" << template_id << "\n"
         << "outputCount=" << output_count << "\n"
         << "firstInputImageUrl=" << first_input_image_url << "\n"
+        << "status=processing\n"
         << std::endl;
 
-    tasks_.emplace(task_id, task);
-    SaveTasks();
+    StartComfyGenerationInBackground(
+        request,
+        task_id,
+        server_action,
+        output_count,
+        first_input_image_url
+    );
 
     json::object response = TaskToJson(task);
     response["workflow"] = workflow;
@@ -701,6 +798,8 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
 }
 
 json::object GenerationService::GetTask(const std::string& task_id) const {
+    std::lock_guard<std::mutex> lock(tasks_mutex_);
+
     auto it = tasks_.find(task_id);
 
     if (it == tasks_.end()) {
@@ -711,6 +810,8 @@ json::object GenerationService::GetTask(const std::string& task_id) const {
 }
 
 json::object GenerationService::GetResult(const std::string& task_id) const {
+    std::lock_guard<std::mutex> lock(tasks_mutex_);
+
     auto it = tasks_.find(task_id);
 
     if (it == tasks_.end()) {
@@ -732,6 +833,8 @@ json::object GenerationService::GetResult(const std::string& task_id) const {
 }
 
 json::object GenerationService::Regenerate(const std::string& task_id) {
+    std::lock_guard<std::mutex> lock(tasks_mutex_);
+
     auto it = tasks_.find(task_id);
 
     if (it == tasks_.end()) {
@@ -740,6 +843,7 @@ json::object GenerationService::Regenerate(const std::string& task_id) {
 
     GenerationTask new_task = it->second;
     new_task.task_id = MakeTaskId();
+    new_task.status = "completed";
     new_task.result_image_urls.clear();
 
     for (int i = 1; i <= new_task.output_count; ++i) {
