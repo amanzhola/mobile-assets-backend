@@ -6,6 +6,7 @@ cmake-build-*/
 
 storage/input/*
 storage/output/*
+storage/tasks.json
 
 *.o
 *.a

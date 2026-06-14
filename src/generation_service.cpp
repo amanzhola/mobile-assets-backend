@@ -6,8 +6,12 @@
 #include <stdexcept>
 
 #include <chrono>
+#include <filesystem>
+#include <cstdlib>
 
 namespace generation {
+
+namespace fs = std::filesystem;
 
 namespace {
 
@@ -107,10 +111,24 @@ json::object MakeError(std::string code, std::string message) {
 
 }  // namespace
 
-GenerationService::GenerationService(std::filesystem::path storage_file,
-                                     std::filesystem::path templates_file)
+GenerationService::GenerationService(
+    fs::path storage_file,
+    fs::path templates_file,
+    comfy::ComfyClient& comfy_client,
+    comfy::WorkflowBuilder& workflow_builder,
+    output::OutputService& output_service,
+    fs::path backend_input_dir,
+    fs::path comfy_input_dir,
+    fs::path comfy_output_dir
+)
     : storage_file_{std::move(storage_file)}
-    , templates_file_{std::move(templates_file)} {
+    , templates_file_{std::move(templates_file)}
+    , comfy_client_{comfy_client}
+    , workflow_builder_{workflow_builder}
+    , output_service_{output_service}
+    , backend_input_dir_{std::move(backend_input_dir)}
+    , comfy_input_dir_{std::move(comfy_input_dir)}
+    , comfy_output_dir_{std::move(comfy_output_dir)} {
     LoadTasks();
 }
 
@@ -346,6 +364,98 @@ std::string GenerationService::FindTemplatePrompt(const std::string& template_id
     return {};
 }
 
+std::optional<std::string> GenerationService::ExtractUploadedFileName(
+    const json::object& request
+) const {
+    auto it = request.find("sourceImageUrl");
+
+    if (it == request.end() || !it->value().is_string()) {
+        return std::nullopt;
+    }
+
+    std::string url = std::string(it->value().as_string());
+
+    const auto query_pos = url.find('?');
+
+    if (query_pos != std::string::npos) {
+        url = url.substr(0, query_pos);
+    }
+
+    const std::string marker = "/uploads/";
+    const auto marker_pos = url.find(marker);
+
+    if (marker_pos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    std::string file_name = url.substr(marker_pos + marker.size());
+
+    if (file_name.empty()) {
+        return std::nullopt;
+    }
+
+    if (file_name.find('/') != std::string::npos || file_name.find('\\') != std::string::npos) {
+        return std::nullopt;
+    }
+
+    return file_name;
+}
+
+std::optional<std::string> GenerationService::RunAiEnhancerViaComfy(
+    const json::object& request,
+    const std::string& task_id
+) {
+    try {
+        auto input_file_name = ExtractUploadedFileName(request);
+
+        if (!input_file_name) {
+            return std::nullopt;
+        }
+
+        fs::create_directories(comfy_input_dir_);
+
+        const fs::path backend_input_file = backend_input_dir_ / *input_file_name;
+        const fs::path comfy_input_file = comfy_input_dir_ / *input_file_name;
+
+        if (!fs::exists(backend_input_file)) {
+            return std::nullopt;
+        }
+
+        fs::copy_file(
+            backend_input_file,
+            comfy_input_file,
+            fs::copy_options::overwrite_existing
+        );
+
+        const std::string output_prefix = "pixo_" + task_id;
+
+        json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
+            *input_file_name,
+            output_prefix
+        );
+
+        auto prompt_id = comfy_client_.QueuePrompt(workflow);
+
+        if (!prompt_id) {
+            return std::nullopt;
+        }
+
+        auto comfy_output_file_name = comfy_client_.WaitForFirstOutputFile(*prompt_id);
+
+        if (!comfy_output_file_name) {
+            return std::nullopt;
+        }
+
+        const fs::path comfy_output_file = comfy_output_dir_ / *comfy_output_file_name;
+        const fs::path saved_output_file = output_service_.SaveFromComfyOutput(comfy_output_file);
+
+        return output_service_.GetPublicUrl(saved_output_file.filename().string());
+
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 json::object GenerationService::CreateGeneration(const json::object& request) {
     const std::string server_action = ReadStringOrEmpty(request, "serverAction");
     const std::string tool_type = ReadStringOrEmpty(request, "toolType");
@@ -431,15 +541,29 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     task.template_id = template_id;
     task.output_count = output_count;
 
-    for (int i = 1; i <= output_count; ++i) {
-        if (!first_input_image_url.empty()) {
-            task.result_image_urls.push_back(first_input_image_url);
-        } else {
-            task.result_image_urls.push_back(
-                MakeMockResultUrl(server_action, task_id, i)
-            );
-        }
-    }
+    if (server_action == "ai_enhancer") {
+	    auto comfy_result_url = RunAiEnhancerViaComfy(request, task_id);
+	
+	    if (comfy_result_url) {
+	        task.result_image_urls.push_back(*comfy_result_url);
+	    } else if (!first_input_image_url.empty()) {
+	        task.result_image_urls.push_back(first_input_image_url);
+	    } else {
+	        task.result_image_urls.push_back(
+	            MakeMockResultUrl(server_action, task_id, 1)
+	        );
+	    }
+	} else {
+	    for (int i = 1; i <= output_count; ++i) {
+	        if (!first_input_image_url.empty()) {
+	            task.result_image_urls.push_back(first_input_image_url);
+	        } else {
+	            task.result_image_urls.push_back(
+	                MakeMockResultUrl(server_action, task_id, i)
+	            );
+	        }
+	    }
+	}
 
     std::cout
         << "[CREATE_GENERATION]\n"

@@ -3,10 +3,14 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <filesystem>
+#include <cstdlib>
 
 #include <iostream>
 
 namespace api {
+
+namespace fs = std::filesystem;
 
 namespace {
 
@@ -28,11 +32,15 @@ bool IsError(const json::object& obj) {
 ApiHandler::ApiHandler(generation::GenerationService& generation_service,
                        catalog::CatalogService& catalog_service,
                        upload::UploadService& upload_service,
-		       comfy::ComfyClient& comfy_client)
+		       comfy::ComfyClient& comfy_client,
+		       comfy::WorkflowBuilder& workflow_builder,
+		       output::OutputService& output_service)
     : generation_service_{generation_service}
     , catalog_service_{catalog_service}
     , upload_service_{upload_service}
-    , comfy_client_{comfy_client} {
+    , comfy_client_{comfy_client}
+    , workflow_builder_{workflow_builder}
+    , output_service_{output_service} {
 }
 
 http::response<http::string_body> ApiHandler::JsonResponse(
@@ -131,6 +139,53 @@ http::response<http::string_body> ApiHandler::ServeUploadedFile(
     }
 }
 
+http::response<http::string_body> ApiHandler::ServeOutputFile(
+    const http::request<http::string_body>& request,
+    const std::string& file_name
+) {
+    try {
+        const auto path = output_service_.GetFilePath(file_name);
+
+        std::ifstream input(path, std::ios::binary);
+
+        if (!input.is_open()) {
+            return JsonResponse(
+                request,
+                MakeError("file_not_found", "Output file not found"),
+                http::status::not_found
+            );
+        }
+
+        std::string body{
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>()
+        };
+
+        http::response<http::string_body> response{http::status::ok, request.version()};
+
+        response.set(
+            http::field::content_type,
+            output_service_.GetContentTypeByFileName(file_name)
+        );
+
+        response.set(http::field::cache_control, "no-cache");
+        response.set(http::field::connection, "close");
+        response.keep_alive(false);
+
+        response.body() = std::move(body);
+        response.content_length(response.body().size());
+
+        return response;
+
+    } catch (const std::exception& e) {
+        return JsonResponse(
+            request,
+            MakeError("bad_output_path", e.what()),
+            http::status::bad_request
+        );
+    }
+}
+
 http::response<http::string_body> ApiHandler::CreateGeneration(
     const http::request<http::string_body>& request
 ) {
@@ -184,6 +239,111 @@ http::response<http::string_body> ApiHandler::Handle(
     	return JsonResponse(request, std::move(body));
     }
 
+    if (request.method() == http::verb::post && target == "/comfy/test-prompt") {
+    	json::object body;
+
+    	try {
+        	json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
+            		"pixo_test.jpg",
+            		"pixo_test_output"
+        	);
+
+        	auto prompt_id = comfy_client_.QueuePrompt(workflow);
+
+        	if (!prompt_id) {
+            		body["ok"] = false;
+            		body["message"] = "Failed to queue ComfyUI prompt";
+            		return JsonResponse(request, std::move(body), http::status::bad_request);
+        	}
+
+        	body["ok"] = true;
+        	body["promptId"] = *prompt_id;
+
+        	return JsonResponse(request, std::move(body));
+
+    	} catch (const std::exception& e) {
+        	body["ok"] = false;
+        	body["message"] = e.what();
+
+        	return JsonResponse(request, std::move(body), http::status::bad_request);
+    	}
+    }
+
+	if (request.method() == http::verb::post && target == "/comfy/test-prompt-result") {
+	    json::object body;
+	
+	    try {
+	        json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
+	            "pixo_test.jpg",
+	            "pixo_test_output"
+	        );
+	
+	        auto prompt_id = comfy_client_.QueuePrompt(workflow);
+	
+	        if (!prompt_id) {
+	            body["ok"] = false;
+	            body["message"] = "Failed to queue ComfyUI prompt";
+	
+	            return JsonResponse(
+	                request,
+	                std::move(body),
+	                http::status::bad_request
+	            );
+	        }
+	
+	        auto output_file_name = comfy_client_.WaitForFirstOutputFile(*prompt_id);
+	
+	        if (!output_file_name) {
+	            body["ok"] = false;
+	            body["promptId"] = *prompt_id;
+	            body["message"] = "ComfyUI output was not found";
+	
+	            return JsonResponse(
+	                request,
+	                std::move(body),
+	                http::status::bad_request
+	            );
+	        }
+	
+	        const char* home_env = std::getenv("HOME");
+	
+	        if (home_env == nullptr) {
+	            body["ok"] = false;
+	            body["message"] = "HOME environment variable is not set";
+	
+	            return JsonResponse(
+	                request,
+	                std::move(body),
+	                http::status::bad_request
+	            );
+	        }
+	
+	        const fs::path comfy_output_file =
+	            fs::path{home_env} / "ComfyUI" / "output" / *output_file_name;
+	
+	        const fs::path saved_file =
+	            output_service_.SaveFromComfyOutput(comfy_output_file);
+	
+	        body["ok"] = true;
+	        body["promptId"] = *prompt_id;
+	        body["outputFile"] = saved_file.filename().string();
+	        body["outputUrl"] =
+	            output_service_.GetPublicUrl(saved_file.filename().string());
+	
+	        return JsonResponse(request, std::move(body));
+	
+	    } catch (const std::exception& e) {
+	        body["ok"] = false;
+	        body["message"] = e.what();
+	
+	        return JsonResponse(
+	            request,
+	            std::move(body),
+	            http::status::bad_request
+	        );
+	    }
+	}
+
     if (request.method() == http::verb::get && target == "/tools") {
         try {
             return JsonResponse(request, catalog_service_.GetTools());
@@ -219,6 +379,15 @@ http::response<http::string_body> ApiHandler::Handle(
             request,
             target.substr(uploads_prefix.size())
         );
+    }
+
+    constexpr std::string_view outputs_prefix = "/outputs/";
+
+    if (request.method() == http::verb::get && target.starts_with(outputs_prefix)) {
+    	return ServeOutputFile(
+        	request,
+        	target.substr(outputs_prefix.size())
+    	);
     }
 
     if (request.method() == http::verb::post && target == "/generations") {

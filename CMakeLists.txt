@@ -24,6 +24,10 @@ add_executable(mobile_assets_backend
     src/upload_service.h
     src/comfy/comfy_client.h
     src/comfy/comfy_client.cpp
+    src/comfy/workflow_builder.h
+    src/comfy/workflow_builder.cpp
+    src/output_service.h
+    src/output_service.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE

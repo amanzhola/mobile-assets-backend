@@ -3,13 +3,16 @@
 #include "generation_service.h"
 #include "http_server.h"
 #include "upload_service.h"
+#include "output_service.h"
 #include "comfy/comfy_client.h"
+#include "comfy/workflow_builder.h"
 
 #include <boost/asio.hpp>
 
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <string>
 
 namespace net = boost::asio;
 namespace fs = std::filesystem;
@@ -23,26 +26,55 @@ int main() {
 
         const fs::path root = fs::path{"/home/ubuntu/mobile-assets-backend"};
 
-        generation::GenerationService generation_service{
-            root / "storage/tasks.json",
-            root / "data/templates.json"
-        };
-
         catalog::CatalogService catalog_service{root / "data"};
 
         upload::UploadService upload_service{
             root / "storage/input"
         };
 
+        const char* public_base_url_env = std::getenv("PUBLIC_BASE_URL");
+
+        const std::string public_base_url = public_base_url_env
+            ? std::string(public_base_url_env)
+            : std::string{};
+
+        output::OutputService output_service{
+            root / "storage/output",
+            public_base_url
+        };
+
         comfy::ComfyClient comfy_client{
             "http://localhost:8188"
+        };
+
+        comfy::WorkflowBuilder workflow_builder{
+            root / "workflows"
+        };
+
+        const char* home_env = std::getenv("HOME");
+
+        if (home_env == nullptr) {
+            throw std::runtime_error("HOME environment variable is not set");
+        }
+
+        generation::GenerationService generation_service{
+            root / "storage/tasks.json",
+            root / "data/templates.json",
+            comfy_client,
+            workflow_builder,
+            output_service,
+            root / "storage/input",
+            fs::path{home_env} / "ComfyUI" / "input",
+            fs::path{home_env} / "ComfyUI" / "output"
         };
 
         api::ApiHandler api_handler{
             generation_service,
             catalog_service,
             upload_service,
-            comfy_client
+            comfy_client,
+            workflow_builder,
+            output_service
         };
 
         http_server::HttpServer server{
