@@ -4,6 +4,8 @@
 #include <iterator>
 #include <string>
 
+#include <iostream>
+
 namespace api {
 
 namespace {
@@ -37,11 +39,15 @@ http::response<http::string_body> ApiHandler::JsonResponse(
     http::status status
 ) const {
     http::response<http::string_body> response{status, request.version()};
+
     response.set(http::field::content_type, "application/json");
     response.set(http::field::cache_control, "no-cache");
-    response.keep_alive(request.keep_alive());
+    response.set(http::field::connection, "close");
+
+    response.keep_alive(false);
+
     response.body() = json::serialize(body);
-    response.prepare_payload();
+    response.content_length(response.body().size());
 
     return response;
 }
@@ -76,6 +82,7 @@ http::response<http::string_body> ApiHandler::ServeUploadedFile(
     const http::request<http::string_body>& request,
     const std::string& file_name
 ) {
+    std::cout << "[SERVE_UPLOAD] file=" << file_name << std::endl;
     try {
         const auto path = upload_service_.GetFilePath(file_name);
 
@@ -94,12 +101,22 @@ http::response<http::string_body> ApiHandler::ServeUploadedFile(
             std::istreambuf_iterator<char>()
         };
 
-        http::response<http::string_body> response{http::status::ok, request.version()};
-        response.set(http::field::content_type, upload_service_.GetContentTypeByFileName(file_name));
+        http::response<http::string_body> response{
+            http::status::ok,
+            request.version()
+        };
+
+        response.set(
+            http::field::content_type,
+            upload_service_.GetContentTypeByFileName(file_name)
+        );
+
         response.set(http::field::cache_control, "no-cache");
-        response.keep_alive(request.keep_alive());
+        response.set(http::field::connection, "close");
+        response.keep_alive(false);
+
         response.body() = std::move(body);
-        response.prepare_payload();
+        response.content_length(response.body().size());
 
         return response;
 

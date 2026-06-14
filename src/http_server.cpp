@@ -24,19 +24,41 @@ void HttpServer::HandleSession(tcp::socket socket) {
     beast::flat_buffer buffer;
 
     try {
-        for (;;) {
-            http::request<http::string_body> request;
-            http::read(socket, buffer, request);
+        http::request_parser<http::string_body> parser;
 
-            auto response = handler_.Handle(request);
-            const bool close = response.need_eof();
+        // Разрешаем загрузку фото до 25 MiB.
+        parser.body_limit(25 * 1024 * 1024);
 
-            http::write(socket, response);
+        http::read(socket, buffer, parser);
 
-            if (close) {
-                break;
-            }
-        }
+        auto request = parser.release();
+
+	http::response<http::string_body> response;
+
+	try {
+    		response = handler_.Handle(request);
+	} catch (const std::exception& e) {
+    		std::cerr << "handler error: " << e.what() << std::endl;
+
+    		response = http::response<http::string_body>{
+        	http::status::internal_server_error,
+        	request.version()
+    	  };
+
+    	  response.set(http::field::content_type, "application/json");
+    	  response.set(http::field::cache_control, "no-cache");
+
+    	  response.body() =
+        	std::string{"{\"error\":true,\"code\":\"internal_error\",\"message\":\""}
+        	+ e.what()
+        	+ "\"}";
+	}
+
+	response.set(http::field::connection, "close");
+	response.keep_alive(false);
+	response.content_length(response.body().size());
+
+	http::write(socket, response);
 
     } catch (const beast::system_error& e) {
         if (e.code() != http::error::end_of_stream) {

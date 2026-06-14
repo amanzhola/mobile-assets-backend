@@ -5,6 +5,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include <chrono>
+
 namespace generation {
 
 namespace {
@@ -21,6 +23,26 @@ std::string ReadStringOrEmpty(const json::object& obj, std::string_view key) {
     }
 
     return std::string(it->value().as_string());
+}
+
+
+std::string ReadTemplateId(const json::object& obj) {
+    if (auto it = obj.find("templateId"); it != obj.end()
+        && it->value().is_string()) {
+        return std::string(it->value().as_string());
+    }
+
+    if (auto options_it = obj.find("options"); options_it != obj.end()
+        && options_it->value().is_object()) {
+        const auto& options = options_it->value().as_object();
+
+        if (auto template_it = options.find("templateId"); template_it != options.end()
+            && template_it->value().is_string()) {
+            return std::string(template_it->value().as_string());
+        }
+    }
+
+    return {};
 }
 
 int ReadIntOrDefault(const json::object& obj, std::string_view key, int default_value) {
@@ -206,7 +228,11 @@ GenerationTask GenerationService::TaskFromJson(const json::object& obj) const {
 }
 
 std::string GenerationService::MakeTaskId() {
-    return "mock_task_" + std::to_string(next_task_id_++);
+    return "mock_task_" + std::to_string(
+        std::chrono::steady_clock::now()
+            .time_since_epoch()
+            .count()
+    );
 }
 
 bool GenerationService::IsKnownAction(const std::string& action) const {
@@ -324,7 +350,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     const std::string server_action = ReadStringOrEmpty(request, "serverAction");
     const std::string tool_type = ReadStringOrEmpty(request, "toolType");
     std::string prompt = ReadStringOrEmpty(request, "prompt");
-    const std::string template_id = ReadStringOrEmpty(request, "templateId");
+    std::string template_id = ReadStringOrEmpty(request, "templateId");
     const int output_count = ReadIntOrDefault(request, "outputCount", 1);
 
     if (server_action.empty()) {
@@ -341,15 +367,21 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
 
     const auto source_image_uris = ReadStringArray(request, "sourceImageUris");
     const auto uploaded_image_ids = ReadStringArray(request, "uploadedImageIds");
+    const auto uploaded_image_urls = ReadStringArray(request, "uploadedImageUrls");
     const std::string first_input_image_url = ReadFirstInputImageUrl(request);
+    const std::string source_image_url = ReadStringOrEmpty(request, "sourceImageUrl");
     const std::string source_image_uri = ReadStringOrEmpty(request, "sourceImageUri");
 
     int image_count = 0;
 
-    if (!uploaded_image_ids.empty()) {
+    if (!uploaded_image_urls.empty()) {
+        image_count = static_cast<int>(uploaded_image_urls.size());
+    } else if (!uploaded_image_ids.empty()) {
         image_count = static_cast<int>(uploaded_image_ids.size());
     } else if (!source_image_uris.empty()) {
         image_count = static_cast<int>(source_image_uris.size());
+    } else if (!source_image_url.empty()) {
+        image_count = 1;
     } else if (!source_image_uri.empty()) {
         image_count = 1;
     }
@@ -368,16 +400,24 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
         }
     }
 
-    if (server_action == "template" && template_id.empty()) {
-        return MakeError("missing_template_id", "template action requires templateId");
-    }
+    if (server_action == "template") {
+    	template_id = ReadTemplateId(request);
 
-    if (server_action == "template" && prompt.empty()) {
-        prompt = FindTemplatePrompt(template_id);
+    	if (template_id.empty()) {
+            return MakeError(
+            	"missing_template_id",
+            	"templateId is required for template generation"
+            );
+    	}
 
-        if (prompt.empty()) {
-            return MakeError("unknown_template_id", "Unknown templateId: " + template_id);
-        }
+    	prompt = FindTemplatePrompt(template_id);
+
+    	if (prompt.empty()) {
+            return MakeError(
+            	"unknown_template_id",
+            	"Unknown templateId: " + template_id
+            );
+   	}
     }
 
     const std::string workflow = ChooseWorkflow(server_action);
@@ -392,10 +432,12 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     task.output_count = output_count;
 
     for (int i = 1; i <= output_count; ++i) {
-        if (!first_input_image_url.empty() && first_input_image_url.starts_with("/uploads/")) {
+        if (!first_input_image_url.empty()) {
             task.result_image_urls.push_back(first_input_image_url);
         } else {
-            task.result_image_urls.push_back(MakeMockResultUrl(server_action, task_id, i));
+            task.result_image_urls.push_back(
+                MakeMockResultUrl(server_action, task_id, i)
+            );
         }
     }
 
@@ -409,6 +451,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
         << "prompt=" << prompt << "\n"
         << "templateId=" << template_id << "\n"
         << "outputCount=" << output_count << "\n"
+        << "firstInputImageUrl=" << first_input_image_url << "\n"
         << std::endl;
 
     tasks_.emplace(task_id, task);

@@ -38,7 +38,7 @@ std::string UploadService::ExtensionFromContentType(const std::string& content_t
         return ".webp";
     }
 
-    return ".bin";
+    return ".jpg";
 }
 
 json::object UploadService::SaveRawImage(std::string body, std::string content_type) {

@@ -20,12 +20,18 @@ int main() {
 
         net::io_context ioc{1};
 
-        generation::GenerationService generation_service{
-    		fs::path{"../storage/tasks.json"},
-    		fs::path{"../data/templates.json"}
-	};
-        catalog::CatalogService catalog_service{fs::path{"../data"}};
-        upload::UploadService upload_service{fs::path{"../storage/input"}};
+const fs::path root = fs::path{"/home/ubuntu/mobile-assets-backend"};
+
+generation::GenerationService generation_service{
+    root / "storage/tasks.json",
+    root / "data/templates.json"
+};
+
+catalog::CatalogService catalog_service{root / "data"};
+
+upload::UploadService upload_service{
+    root / "storage/input"
+};
 
         api::ApiHandler api_handler{
             generation_service,
