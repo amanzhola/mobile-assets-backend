@@ -62,9 +62,10 @@ private:
 
     std::string FindTemplatePrompt(const std::string& template_id) const;
 
-    std::optional<std::string> RunAiEnhancerViaComfy(
-        const json::object& request,
-        const std::string& task_id
+    std::optional<std::string> RunGenerationViaComfy(
+    	const json::object& request,
+    	const std::string& task_id,
+    	const std::string& server_action
     );
 
     std::optional<std::string> ExtractUploadedFileName(

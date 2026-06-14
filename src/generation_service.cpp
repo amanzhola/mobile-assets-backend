@@ -401,9 +401,10 @@ std::optional<std::string> GenerationService::ExtractUploadedFileName(
     return file_name;
 }
 
-std::optional<std::string> GenerationService::RunAiEnhancerViaComfy(
+std::optional<std::string> GenerationService::RunGenerationViaComfy(
     const json::object& request,
-    const std::string& task_id
+    const std::string& task_id,
+    const std::string& server_action
 ) {
     try {
         auto input_file_name = ExtractUploadedFileName(request);
@@ -427,9 +428,11 @@ std::optional<std::string> GenerationService::RunAiEnhancerViaComfy(
             fs::copy_options::overwrite_existing
         );
 
-        const std::string output_prefix = "pixo_" + task_id;
+        const std::string output_prefix =
+            "pixo_" + server_action + "_" + task_id;
 
-        json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
+        json::object workflow = workflow_builder_.BuildWorkflow(
+            server_action,
             *input_file_name,
             output_prefix
         );
@@ -440,16 +443,22 @@ std::optional<std::string> GenerationService::RunAiEnhancerViaComfy(
             return std::nullopt;
         }
 
-        auto comfy_output_file_name = comfy_client_.WaitForFirstOutputFile(*prompt_id);
+        auto comfy_output_file_name =
+            comfy_client_.WaitForFirstOutputFile(*prompt_id);
 
         if (!comfy_output_file_name) {
             return std::nullopt;
         }
 
-        const fs::path comfy_output_file = comfy_output_dir_ / *comfy_output_file_name;
-        const fs::path saved_output_file = output_service_.SaveFromComfyOutput(comfy_output_file);
+        const fs::path comfy_output_file =
+            comfy_output_dir_ / *comfy_output_file_name;
 
-        return output_service_.GetPublicUrl(saved_output_file.filename().string());
+        const fs::path saved_output_file =
+            output_service_.SaveFromComfyOutput(comfy_output_file);
+
+        return output_service_.GetPublicUrl(
+            saved_output_file.filename().string()
+        );
 
     } catch (...) {
         return std::nullopt;
@@ -541,28 +550,26 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     task.template_id = template_id;
     task.output_count = output_count;
 
-    if (server_action == "ai_enhancer") {
-	    auto comfy_result_url = RunAiEnhancerViaComfy(request, task_id);
+    auto comfy_result_url = RunGenerationViaComfy(
+	    request,
+	    task_id,
+	    server_action
+	);
 	
-	    if (comfy_result_url) {
-	        task.result_image_urls.push_back(*comfy_result_url);
-	    } else if (!first_input_image_url.empty()) {
-	        task.result_image_urls.push_back(first_input_image_url);
-	    } else {
-	        task.result_image_urls.push_back(
-	            MakeMockResultUrl(server_action, task_id, 1)
-	        );
-	    }
+	if (comfy_result_url) {
+	    task.result_image_urls.push_back(*comfy_result_url);
+	} else if (!first_input_image_url.empty()) {
+	    task.result_image_urls.push_back(first_input_image_url);
 	} else {
-	    for (int i = 1; i <= output_count; ++i) {
-	        if (!first_input_image_url.empty()) {
-	            task.result_image_urls.push_back(first_input_image_url);
-	        } else {
-	            task.result_image_urls.push_back(
-	                MakeMockResultUrl(server_action, task_id, i)
-	            );
-	        }
-	    }
+	    task.result_image_urls.push_back(
+	        MakeMockResultUrl(server_action, task_id, 1)
+	    );
+	}
+	
+	for (int i = 1; i < output_count; ++i) {
+	    task.result_image_urls.push_back(
+	        task.result_image_urls.front()
+	    );
 	}
 
     std::cout

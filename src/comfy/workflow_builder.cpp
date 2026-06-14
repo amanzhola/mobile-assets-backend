@@ -76,9 +76,12 @@ void WorkflowBuilder::ReplacePlaceholders(json::value& value,
     }
 }
 
-json::object WorkflowBuilder::BuildAiEnhancerWorkflow(const std::string& input_image_file_name,
-                                                      const std::string& output_prefix) const {
-    json::object workflow = LoadWorkflowTemplate("ai_enhancer.json");
+json::object WorkflowBuilder::BuildWorkflow(
+    const std::string& server_action,
+    const std::string& input_image_file_name,
+    const std::string& output_prefix
+) const {
+    json::object workflow = LoadWorkflowTemplate(server_action + ".json");
 
     json::value workflow_value = workflow;
 
@@ -89,6 +92,17 @@ json::object WorkflowBuilder::BuildAiEnhancerWorkflow(const std::string& input_i
     );
 
     return workflow_value.as_object();
+}
+
+json::object WorkflowBuilder::BuildAiEnhancerWorkflow(
+    const std::string& input_image_file_name,
+    const std::string& output_prefix
+) const {
+    return BuildWorkflow(
+        "ai_enhancer",
+        input_image_file_name,
+        output_prefix
+    );
 }
 
 }  // namespace comfy
