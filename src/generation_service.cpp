@@ -8,6 +8,8 @@
 #include <chrono>
 #include <filesystem>
 #include <cstdlib>
+#include <algorithm>
+#include <vector>
 
 namespace generation {
 
@@ -107,6 +109,40 @@ json::object MakeError(std::string code, std::string message) {
     obj["code"] = std::move(code);
     obj["message"] = std::move(message);
     return obj;
+}
+
+std::optional<std::string> ExtractFileNameFromUploadUrl(
+    const std::string& raw_url
+) {
+    std::string url = raw_url;
+
+    const auto query_pos = url.find('?');
+
+    if (query_pos != std::string::npos) {
+        url = url.substr(0, query_pos);
+    }
+
+    const std::string marker = "/uploads/";
+    const auto marker_pos = url.find(marker);
+
+    if (marker_pos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    std::string file_name = url.substr(marker_pos + marker.size());
+
+    if (file_name.empty()) {
+        return std::nullopt;
+    }
+
+    if (
+        file_name.find('/') != std::string::npos ||
+        file_name.find('\\') != std::string::npos
+    ) {
+        return std::nullopt;
+    }
+
+    return file_name;
 }
 
 }  // namespace
@@ -364,59 +400,68 @@ std::string GenerationService::FindTemplatePrompt(const std::string& template_id
     return {};
 }
 
-std::optional<std::string> GenerationService::ExtractUploadedFileName(
+std::vector<std::string> GenerationService::ExtractUploadedFileNames(
     const json::object& request
 ) const {
-    auto it = request.find("sourceImageUrl");
+    std::vector<std::string> result;
 
-    if (it == request.end() || !it->value().is_string()) {
-        return std::nullopt;
+    auto single_it = request.find("sourceImageUrl");
+
+    if (single_it != request.end() && single_it->value().is_string()) {
+        auto file_name = ExtractFileNameFromUploadUrl(
+            std::string(single_it->value().as_string())
+        );
+
+        if (file_name) {
+            result.push_back(*file_name);
+        }
     }
 
-    std::string url = std::string(it->value().as_string());
+    auto uploaded_it = request.find("uploadedImageUrls");
 
-    const auto query_pos = url.find('?');
+    if (uploaded_it != request.end() && uploaded_it->value().is_array()) {
+        for (const auto& item : uploaded_it->value().as_array()) {
+            if (!item.is_string()) {
+                continue;
+            }
 
-    if (query_pos != std::string::npos) {
-        url = url.substr(0, query_pos);
+            auto file_name = ExtractFileNameFromUploadUrl(
+                std::string(item.as_string())
+            );
+
+            if (!file_name) {
+                continue;
+            }
+
+            const bool already_exists = std::find(
+                result.begin(),
+                result.end(),
+                *file_name
+            ) != result.end();
+
+            if (!already_exists) {
+                result.push_back(*file_name);
+            }
+        }
     }
 
-    const std::string marker = "/uploads/";
-    const auto marker_pos = url.find(marker);
-
-    if (marker_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    std::string file_name = url.substr(marker_pos + marker.size());
-
-    if (file_name.empty()) {
-        return std::nullopt;
-    }
-
-    if (file_name.find('/') != std::string::npos || file_name.find('\\') != std::string::npos) {
-        return std::nullopt;
-    }
-
-    return file_name;
+    return result;
 }
 
-std::optional<std::string> GenerationService::RunGenerationViaComfy(
-    const json::object& request,
+std::optional<std::string> GenerationService::RunSingleImageViaComfy(
+    const std::string& input_file_name,
     const std::string& task_id,
-    const std::string& server_action
+    const std::string& server_action,
+    int image_index
 ) {
     try {
-        auto input_file_name = ExtractUploadedFileName(request);
-
-        if (!input_file_name) {
-            return std::nullopt;
-        }
-
         fs::create_directories(comfy_input_dir_);
 
-        const fs::path backend_input_file = backend_input_dir_ / *input_file_name;
-        const fs::path comfy_input_file = comfy_input_dir_ / *input_file_name;
+        const fs::path backend_input_file =
+            backend_input_dir_ / input_file_name;
+
+        const fs::path comfy_input_file =
+            comfy_input_dir_ / input_file_name;
 
         if (!fs::exists(backend_input_file)) {
             return std::nullopt;
@@ -429,11 +474,12 @@ std::optional<std::string> GenerationService::RunGenerationViaComfy(
         );
 
         const std::string output_prefix =
-            "pixo_" + server_action + "_" + task_id;
+            "pixo_" + server_action + "_" + task_id + "_" +
+            std::to_string(image_index);
 
         json::object workflow = workflow_builder_.BuildWorkflow(
             server_action,
-            *input_file_name,
+            input_file_name,
             output_prefix
         );
 
@@ -463,6 +509,63 @@ std::optional<std::string> GenerationService::RunGenerationViaComfy(
     } catch (...) {
         return std::nullopt;
     }
+}
+
+std::vector<std::string> GenerationService::RunGenerationViaComfy(
+    const json::object& request,
+    const std::string& task_id,
+    const std::string& server_action,
+    int output_count
+) {
+    std::vector<std::string> result_urls;
+
+    const std::vector<std::string> input_file_names =
+        ExtractUploadedFileNames(request);
+
+    if (input_file_names.empty()) {
+        return result_urls;
+    }
+
+    if (server_action == "prompt") {
+        int image_index = 0;
+
+        for (const std::string& input_file_name : input_file_names) {
+            auto output_url = RunSingleImageViaComfy(
+                input_file_name,
+                task_id,
+                server_action,
+                image_index
+            );
+
+            if (output_url) {
+                result_urls.push_back(*output_url);
+            }
+
+            ++image_index;
+        }
+
+        return result_urls;
+    }
+
+    auto output_url = RunSingleImageViaComfy(
+        input_file_names.front(),
+        task_id,
+        server_action,
+        0
+    );
+
+    if (output_url) {
+        result_urls.push_back(*output_url);
+    }
+
+    while (
+        !result_urls.empty() &&
+        static_cast<int>(result_urls.size()) < output_count
+    ) {
+        result_urls.push_back(result_urls.front());
+    }
+
+    return result_urls;
 }
 
 json::object GenerationService::CreateGeneration(const json::object& request) {
@@ -550,14 +653,17 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     task.template_id = template_id;
     task.output_count = output_count;
 
-    auto comfy_result_url = RunGenerationViaComfy(
+    std::vector<std::string> comfy_result_urls = RunGenerationViaComfy(
 	    request,
 	    task_id,
-	    server_action
+	    server_action,
+	    output_count
 	);
 	
-	if (comfy_result_url) {
-	    task.result_image_urls.push_back(*comfy_result_url);
+	if (!comfy_result_urls.empty()) {
+	    for (const std::string& url : comfy_result_urls) {
+	        task.result_image_urls.push_back(url);
+	    }
 	} else if (!first_input_image_url.empty()) {
 	    task.result_image_urls.push_back(first_input_image_url);
 	} else {
@@ -566,7 +672,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
 	    );
 	}
 	
-	for (int i = 1; i < output_count; ++i) {
+	while (static_cast<int>(task.result_image_urls.size()) < output_count) {
 	    task.result_image_urls.push_back(
 	        task.result_image_urls.front()
 	    );

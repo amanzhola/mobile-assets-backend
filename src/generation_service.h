@@ -62,15 +62,23 @@ private:
 
     std::string FindTemplatePrompt(const std::string& template_id) const;
 
-    std::optional<std::string> RunGenerationViaComfy(
-    	const json::object& request,
-    	const std::string& task_id,
-    	const std::string& server_action
-    );
+    std::vector<std::string> RunGenerationViaComfy(
+	    const json::object& request,
+	    const std::string& task_id,
+	    const std::string& server_action,
+	    int output_count
+	);
+	
+	std::optional<std::string> RunSingleImageViaComfy(
+	    const std::string& input_file_name,
+	    const std::string& task_id,
+	    const std::string& server_action,
+	    int image_index
+	);
 
-    std::optional<std::string> ExtractUploadedFileName(
-        const json::object& request
-    ) const;
+	std::vector<std::string> ExtractUploadedFileNames(
+	    const json::object& request
+	) const;
 
     json::object TaskToJson(const GenerationTask& task) const;
     GenerationTask TaskFromJson(const json::object& obj) const;

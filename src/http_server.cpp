@@ -56,7 +56,6 @@ void HttpServer::HandleSession(tcp::socket socket) {
 
         response.set(http::field::connection, "close");
         response.keep_alive(false);
-        response.content_length(response.body().size());
 
         http::write(socket, response);
 

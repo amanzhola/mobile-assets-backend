@@ -108,6 +108,8 @@ http::response<http::string_body> ApiHandler::ServeUploadedFile(
             std::istreambuf_iterator<char>()
         };
 
+        const std::size_t body_size = body.size();
+
         http::response<http::string_body> response{
             http::status::ok,
             request.version()
@@ -124,7 +126,7 @@ http::response<http::string_body> ApiHandler::ServeUploadedFile(
 
         if (request.method() == http::verb::head) {
             response.body() = "";
-            response.content_length(body.size());
+            response.content_length(body_size);
         } else {
             response.body() = std::move(body);
             response.content_length(response.body().size());
@@ -163,6 +165,8 @@ http::response<http::string_body> ApiHandler::ServeOutputFile(
             std::istreambuf_iterator<char>()
         };
 
+        const std::size_t body_size = body.size();
+
         http::response<http::string_body> response{
             http::status::ok,
             request.version()
@@ -179,7 +183,7 @@ http::response<http::string_body> ApiHandler::ServeOutputFile(
 
         if (request.method() == http::verb::head) {
             response.body() = "";
-            response.content_length(body.size());
+            response.content_length(body_size);
         } else {
             response.body() = std::move(body);
             response.content_length(response.body().size());
