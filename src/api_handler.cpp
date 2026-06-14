@@ -6,8 +6,6 @@
 #include <filesystem>
 #include <cstdlib>
 
-#include <iostream>
-
 namespace api {
 
 namespace fs = std::filesystem;
@@ -92,7 +90,6 @@ http::response<http::string_body> ApiHandler::ServeUploadedFile(
     const http::request<http::string_body>& request,
     const std::string& file_name
 ) {
-    std::cout << "[SERVE_UPLOAD] file=" << file_name << std::endl;
     try {
         const auto path = upload_service_.GetFilePath(file_name);
 
@@ -125,8 +122,13 @@ http::response<http::string_body> ApiHandler::ServeUploadedFile(
         response.set(http::field::connection, "close");
         response.keep_alive(false);
 
-        response.body() = std::move(body);
-        response.content_length(response.body().size());
+        if (request.method() == http::verb::head) {
+            response.body() = "";
+            response.content_length(body.size());
+        } else {
+            response.body() = std::move(body);
+            response.content_length(response.body().size());
+        }
 
         return response;
 
@@ -161,7 +163,10 @@ http::response<http::string_body> ApiHandler::ServeOutputFile(
             std::istreambuf_iterator<char>()
         };
 
-        http::response<http::string_body> response{http::status::ok, request.version()};
+        http::response<http::string_body> response{
+            http::status::ok,
+            request.version()
+        };
 
         response.set(
             http::field::content_type,
@@ -172,8 +177,13 @@ http::response<http::string_body> ApiHandler::ServeOutputFile(
         response.set(http::field::connection, "close");
         response.keep_alive(false);
 
-        response.body() = std::move(body);
-        response.content_length(response.body().size());
+        if (request.method() == http::verb::head) {
+            response.body() = "";
+            response.content_length(body.size());
+        } else {
+            response.body() = std::move(body);
+            response.content_length(response.body().size());
+        }
 
         return response;
 
@@ -271,71 +281,71 @@ http::response<http::string_body> ApiHandler::Handle(
 
 	if (request.method() == http::verb::post && target == "/comfy/test-prompt-result") {
 	    json::object body;
-	
+
 	    try {
 	        json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
 	            "pixo_test.jpg",
 	            "pixo_test_output"
 	        );
-	
+
 	        auto prompt_id = comfy_client_.QueuePrompt(workflow);
-	
+
 	        if (!prompt_id) {
 	            body["ok"] = false;
 	            body["message"] = "Failed to queue ComfyUI prompt";
-	
+
 	            return JsonResponse(
 	                request,
 	                std::move(body),
 	                http::status::bad_request
 	            );
 	        }
-	
+
 	        auto output_file_name = comfy_client_.WaitForFirstOutputFile(*prompt_id);
-	
+
 	        if (!output_file_name) {
 	            body["ok"] = false;
 	            body["promptId"] = *prompt_id;
 	            body["message"] = "ComfyUI output was not found";
-	
+
 	            return JsonResponse(
 	                request,
 	                std::move(body),
 	                http::status::bad_request
 	            );
 	        }
-	
+
 	        const char* home_env = std::getenv("HOME");
-	
+
 	        if (home_env == nullptr) {
 	            body["ok"] = false;
 	            body["message"] = "HOME environment variable is not set";
-	
+
 	            return JsonResponse(
 	                request,
 	                std::move(body),
 	                http::status::bad_request
 	            );
 	        }
-	
+
 	        const fs::path comfy_output_file =
 	            fs::path{home_env} / "ComfyUI" / "output" / *output_file_name;
-	
+
 	        const fs::path saved_file =
 	            output_service_.SaveFromComfyOutput(comfy_output_file);
-	
+
 	        body["ok"] = true;
 	        body["promptId"] = *prompt_id;
 	        body["outputFile"] = saved_file.filename().string();
 	        body["outputUrl"] =
 	            output_service_.GetPublicUrl(saved_file.filename().string());
-	
+
 	        return JsonResponse(request, std::move(body));
-	
+
 	    } catch (const std::exception& e) {
 	        body["ok"] = false;
 	        body["message"] = e.what();
-	
+
 	        return JsonResponse(
 	            request,
 	            std::move(body),
@@ -374,7 +384,8 @@ http::response<http::string_body> ApiHandler::Handle(
 
     constexpr std::string_view uploads_prefix = "/uploads/";
 
-    if (request.method() == http::verb::get && target.starts_with(uploads_prefix)) {
+    if ((request.method() == http::verb::get || request.method() == http::verb::head)
+    && target.starts_with(uploads_prefix)) {
         return ServeUploadedFile(
             request,
             target.substr(uploads_prefix.size())
@@ -383,7 +394,8 @@ http::response<http::string_body> ApiHandler::Handle(
 
     constexpr std::string_view outputs_prefix = "/outputs/";
 
-    if (request.method() == http::verb::get && target.starts_with(outputs_prefix)) {
+    if ((request.method() == http::verb::get || request.method() == http::verb::head)
+    && target.starts_with(outputs_prefix)) {
     	return ServeOutputFile(
         	request,
         	target.substr(outputs_prefix.size())

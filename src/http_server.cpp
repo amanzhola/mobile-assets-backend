@@ -1,5 +1,7 @@
 #include "http_server.h"
 
+#include <boost/system/errc.hpp>
+
 #include <iostream>
 
 namespace http_server {
@@ -26,42 +28,45 @@ void HttpServer::HandleSession(tcp::socket socket) {
     try {
         http::request_parser<http::string_body> parser;
 
-        // Разрешаем загрузку фото до 25 MiB.
         parser.body_limit(25 * 1024 * 1024);
 
         http::read(socket, buffer, parser);
 
         auto request = parser.release();
 
-	http::response<http::string_body> response;
+        http::response<http::string_body> response;
 
-	try {
-    		response = handler_.Handle(request);
-	} catch (const std::exception& e) {
-    		std::cerr << "handler error: " << e.what() << std::endl;
+        try {
+            response = handler_.Handle(request);
+        } catch (const std::exception& e) {
+            std::cerr << "handler error: " << e.what() << std::endl;
 
-    		response = http::response<http::string_body>{
-        	http::status::internal_server_error,
-        	request.version()
-    	  };
+            response = http::response<http::string_body>{
+                http::status::internal_server_error,
+                request.version()
+            };
 
-    	  response.set(http::field::content_type, "application/json");
-    	  response.set(http::field::cache_control, "no-cache");
+            response.set(http::field::content_type, "application/json");
+            response.set(http::field::cache_control, "no-cache");
+            response.body() =
+                std::string{"{\"error\":true,\"code\":\"internal_error\",\"message\":\""}
+                + e.what()
+                + "\"}";
+        }
 
-    	  response.body() =
-        	std::string{"{\"error\":true,\"code\":\"internal_error\",\"message\":\""}
-        	+ e.what()
-        	+ "\"}";
-	}
+        response.set(http::field::connection, "close");
+        response.keep_alive(false);
+        response.content_length(response.body().size());
 
-	response.set(http::field::connection, "close");
-	response.keep_alive(false);
-	response.content_length(response.body().size());
-
-	http::write(socket, response);
+        http::write(socket, response);
 
     } catch (const beast::system_error& e) {
-        if (e.code() != http::error::end_of_stream) {
+        const auto code = e.code();
+
+        if (code != http::error::end_of_stream &&
+            code != boost::asio::error::operation_aborted &&
+            code != boost::asio::error::connection_reset &&
+            code.value() != boost::system::errc::broken_pipe) {
             std::cerr << "session error: " << e.what() << std::endl;
         }
 
