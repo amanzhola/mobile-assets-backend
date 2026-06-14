@@ -3,6 +3,7 @@
 #include "generation_service.h"
 #include "http_server.h"
 #include "upload_service.h"
+#include "comfy/comfy_client.h"
 
 #include <boost/asio.hpp>
 
@@ -20,23 +21,28 @@ int main() {
 
         net::io_context ioc{1};
 
-const fs::path root = fs::path{"/home/ubuntu/mobile-assets-backend"};
+        const fs::path root = fs::path{"/home/ubuntu/mobile-assets-backend"};
 
-generation::GenerationService generation_service{
-    root / "storage/tasks.json",
-    root / "data/templates.json"
-};
+        generation::GenerationService generation_service{
+            root / "storage/tasks.json",
+            root / "data/templates.json"
+        };
 
-catalog::CatalogService catalog_service{root / "data"};
+        catalog::CatalogService catalog_service{root / "data"};
 
-upload::UploadService upload_service{
-    root / "storage/input"
-};
+        upload::UploadService upload_service{
+            root / "storage/input"
+        };
+
+        comfy::ComfyClient comfy_client{
+            "http://localhost:8188"
+        };
 
         api::ApiHandler api_handler{
             generation_service,
             catalog_service,
-            upload_service
+            upload_service,
+            comfy_client
         };
 
         http_server::HttpServer server{

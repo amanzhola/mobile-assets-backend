@@ -27,10 +27,12 @@ bool IsError(const json::object& obj) {
 
 ApiHandler::ApiHandler(generation::GenerationService& generation_service,
                        catalog::CatalogService& catalog_service,
-                       upload::UploadService& upload_service)
+                       upload::UploadService& upload_service,
+		       comfy::ComfyClient& comfy_client)
     : generation_service_{generation_service}
     , catalog_service_{catalog_service}
-    , upload_service_{upload_service} {
+    , upload_service_{upload_service}
+    , comfy_client_{comfy_client} {
 }
 
 http::response<http::string_body> ApiHandler::JsonResponse(
@@ -172,6 +174,14 @@ http::response<http::string_body> ApiHandler::Handle(
         body["service"] = "mobile_assets_backend";
 
         return JsonResponse(request, std::move(body));
+    }
+
+    if (request.method() == http::verb::get && target == "/comfy/health") {
+    	json::object body;
+    	body["available"] = comfy_client_.IsAvailable();
+    	body["url"] = "http://localhost:8188";
+
+    	return JsonResponse(request, std::move(body));
     }
 
     if (request.method() == http::verb::get && target == "/tools") {

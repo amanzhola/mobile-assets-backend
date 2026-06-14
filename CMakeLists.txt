@@ -22,6 +22,8 @@ add_executable(mobile_assets_backend
     src/catalog_service.h
     src/upload_service.cpp
     src/upload_service.h
+    src/comfy/comfy_client.h
+    src/comfy/comfy_client.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE
