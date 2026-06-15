@@ -256,6 +256,7 @@ GenerationTask GenerationService::TaskFromJson(const json::object& obj) const {
     task.prompt = ReadStringOrEmpty(obj, "prompt");
     task.template_id = ReadStringOrEmpty(obj, "templateId");
     task.output_count = ReadIntOrDefault(obj, "outputCount", 1);
+    task.progress_percent = ReadIntOrDefault(obj, "progressPercent", 0);
 
     if (task.status.empty()) {
         task.status = "completed";
@@ -284,6 +285,7 @@ json::object GenerationService::TaskToJson(const GenerationTask& task) const {
     json::object obj;
     obj["taskId"] = task.task_id;
     obj["status"] = task.status;
+    obj["progressPercent"] = task.progress_percent;
     obj["serverAction"] = task.server_action;
     obj["toolType"] = task.tool_type;
     obj["prompt"] = task.prompt;
@@ -484,12 +486,17 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
     try {
         fs::create_directories(comfy_input_dir_);
 
-        const fs::path backend_input_file = backend_input_dir_ / input_file_name;
-        const fs::path comfy_input_file = comfy_input_dir_ / input_file_name;
+        const fs::path backend_input_file =
+            backend_input_dir_ / input_file_name;
+
+        const fs::path comfy_input_file =
+            comfy_input_dir_ / input_file_name;
 
         if (!fs::exists(backend_input_file)) {
             return std::nullopt;
         }
+
+        UpdateTaskProgress(task_id, 10);
 
         fs::copy_file(
             backend_input_file,
@@ -497,8 +504,20 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             fs::copy_options::overwrite_existing
         );
 
+        const bool uploaded = comfy_client_.UploadImage(
+            backend_input_file,
+            input_file_name
+        );
+
+        if (!uploaded) {
+            return std::nullopt;
+        }
+
+        UpdateTaskProgress(task_id, 20);
+
         const std::string output_prefix =
-            "pixo_" + server_action + "_" + task_id + "_" + std::to_string(image_index);
+            "pixo_" + server_action + "_" + task_id + "_" +
+            std::to_string(image_index);
 
         json::object workflow = workflow_builder_.BuildWorkflow(
             server_action,
@@ -512,6 +531,9 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             return std::nullopt;
         }
 
+        UpdateTaskProgress(task_id, 30);
+        UpdateTaskProgress(task_id, 40);
+
         auto comfy_output_file_name = comfy_client_.WaitForFirstOutputFile(
             *prompt_id,
             240,
@@ -519,19 +541,49 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
         );
 
         if (!comfy_output_file_name) {
-            comfy_output_file_name = FindNewestComfyOutputByPrefix(output_prefix);
+            comfy_output_file_name =
+                FindNewestComfyOutputByPrefix(output_prefix);
         }
 
         if (!comfy_output_file_name) {
             return std::nullopt;
         }
 
-        const fs::path comfy_output_file = comfy_output_dir_ / *comfy_output_file_name;
-        const fs::path saved_output_file = output_service_.SaveFromComfyOutput(comfy_output_file);
+        UpdateTaskProgress(task_id, 85);
 
-        return output_service_.GetPublicUrl(
-            saved_output_file.filename().string()
-        );
+        const fs::path local_comfy_output_file =
+		    comfy_output_dir_ / *comfy_output_file_name;
+		
+		fs::path source_output_file = local_comfy_output_file;
+		
+		if (!fs::exists(local_comfy_output_file)) {
+		    const bool downloaded = comfy_client_.DownloadOutputImage(
+		        *comfy_output_file_name,
+		        local_comfy_output_file
+		    );
+		
+		    if (!downloaded) {
+		        std::cout
+		            << "[COMFY_OUTPUT_SOURCE_ERROR]\n"
+		            << "taskId=" << task_id << "\n"
+		            << "file=" << local_comfy_output_file.string() << "\n"
+		            << "message=local output missing and remote download failed\n"
+		            << std::endl;
+		
+		        return std::nullopt;
+		    }
+		}
+		
+		UpdateTaskProgress(task_id, 92);
+		
+		const fs::path saved_output_file =
+		    output_service_.SaveFromComfyOutput(source_output_file);
+		
+		UpdateTaskProgress(task_id, 95);
+		
+		return output_service_.GetPublicUrl(
+		    saved_output_file.filename().string()
+		);
 
     } catch (...) {
         return std::nullopt;
@@ -596,15 +648,17 @@ void GenerationService::StartComfyGenerationInBackground(
     std::string task_id,
     std::string server_action,
     int output_count,
-    std::string fallback_image_url
+    std::string first_input_image_url
 ) {
-    std::thread{
+    std::thread(
         [this,
          request = std::move(request),
          task_id = std::move(task_id),
          server_action = std::move(server_action),
-         fallback_image_url = std::move(fallback_image_url),
-         output_count]() mutable {
+         output_count,
+         first_input_image_url = std::move(first_input_image_url)]() mutable {
+            UpdateTaskProgress(task_id, 5);
+
             std::vector<std::string> result_urls = RunGenerationViaComfy(
                 request,
                 task_id,
@@ -615,10 +669,14 @@ void GenerationService::StartComfyGenerationInBackground(
             if (!result_urls.empty()) {
                 CompleteTaskWithResults(task_id, result_urls);
             } else {
-                FailTaskWithFallback(task_id, fallback_image_url, output_count);
+                FailTaskWithFallback(
+                    task_id,
+                    first_input_image_url,
+                    output_count
+                );
             }
         }
-    }.detach();
+    ).detach();
 }
 
 void GenerationService::CompleteTaskWithResults(
@@ -634,6 +692,7 @@ void GenerationService::CompleteTaskWithResults(
     }
 
     it->second.status = "completed";
+    it->second.progress_percent = 100;
     it->second.result_image_urls = result_urls;
 
     while (
@@ -646,10 +705,9 @@ void GenerationService::CompleteTaskWithResults(
     SaveTasks();
 }
 
-void GenerationService::FailTaskWithFallback(
+void GenerationService::UpdateTaskProgress(
     const std::string& task_id,
-    const std::string& fallback_image_url,
-    int output_count
+    int progress_percent
 ) {
     std::lock_guard<std::mutex> lock(tasks_mutex_);
 
@@ -659,19 +717,49 @@ void GenerationService::FailTaskWithFallback(
         return;
     }
 
-    it->second.status = "completed";
-
-    if (!fallback_image_url.empty()) {
-        it->second.result_image_urls = {fallback_image_url};
-    } else {
-        it->second.result_image_urls = {
-            MakeMockResultUrl(it->second.server_action, task_id, 1)
-        };
+    if (progress_percent < 0) {
+        progress_percent = 0;
     }
 
-    while (static_cast<int>(it->second.result_image_urls.size()) < output_count) {
-        it->second.result_image_urls.push_back(it->second.result_image_urls.front());
+    if (progress_percent > 100) {
+        progress_percent = 100;
     }
+
+    if (it->second.status != "processing") {
+        return;
+    }
+
+    it->second.progress_percent = progress_percent;
+
+    SaveTasks();
+}
+
+void GenerationService::FailTaskWithFallback(
+    const std::string& task_id,
+    const std::string& fallback_image_url,
+    int output_count
+) {
+    (void)fallback_image_url;
+    (void)output_count;
+
+    std::lock_guard<std::mutex> lock(tasks_mutex_);
+
+    auto it = tasks_.find(task_id);
+
+    if (it == tasks_.end()) {
+        return;
+    }
+
+    it->second.status = "error";
+    it->second.progress_percent = 100;
+    it->second.result_image_urls.clear();
+
+    std::cout
+        << "[GENERATION_ERROR]\n"
+        << "taskId=" << task_id << "\n"
+        << "serverAction=" << it->second.server_action << "\n"
+        << "message=ComfyUI returned no output\n"
+        << std::endl;
 
     SaveTasks();
 }
@@ -761,6 +849,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     task.template_id = template_id;
     task.output_count = output_count;
     task.status = "processing";
+    task.progress_percent = 0;
     task.result_image_urls.clear();
 
     {

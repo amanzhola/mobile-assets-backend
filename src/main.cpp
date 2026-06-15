@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 namespace net = boost::asio;
@@ -34,17 +35,25 @@ int main() {
 
         const char* public_base_url_env = std::getenv("PUBLIC_BASE_URL");
 
-        const std::string public_base_url = public_base_url_env
-            ? std::string(public_base_url_env)
-            : std::string{};
+        const std::string public_base_url =
+            public_base_url_env != nullptr && std::string(public_base_url_env).size() > 0
+                ? std::string(public_base_url_env)
+                : std::string{};
 
         output::OutputService output_service{
             root / "storage/output",
             public_base_url
         };
 
+        const char* comfy_url_env = std::getenv("COMFY_BASE_URL");
+
+        const std::string comfy_base_url =
+            comfy_url_env != nullptr && std::string(comfy_url_env).size() > 0
+                ? std::string(comfy_url_env)
+                : std::string{"http://localhost:8188"};
+
         comfy::ComfyClient comfy_client{
-            "http://localhost:8188"
+            comfy_base_url
         };
 
         comfy::WorkflowBuilder workflow_builder{
@@ -84,6 +93,8 @@ int main() {
         };
 
         std::cout << "PIXO backend started on 0.0.0.0:8080" << std::endl;
+        std::cout << "PUBLIC_BASE_URL=" << public_base_url << std::endl;
+        std::cout << "COMFY_BASE_URL=" << comfy_base_url << std::endl;
 
         server.Run();
 

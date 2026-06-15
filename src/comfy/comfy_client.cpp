@@ -5,9 +5,15 @@
 #include <boost/json.hpp>
 
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <thread>
+
+#include <fstream>
+#include <sstream>
+#include <iostream>
 
 namespace comfy {
 
@@ -117,78 +123,224 @@ ComfyClient::ComfyClient(std::string base_url)
     : base_url_(std::move(base_url)) {
 }
 
-bool ComfyClient::IsAvailable() const {
-    try {
-        const auto res = SendRequest(
-            base_url_,
-            http::verb::get,
-            "/system_stats"
-        );
-
-        return res.result() == http::status::ok;
-
-    } catch (...) {
-        return false;
-    }
+const std::string& ComfyClient::GetBaseUrl() const {
+    return base_url_;
 }
 
-std::optional<std::string> ComfyClient::QueuePrompt(const json::object& workflow) const {
-    try {
+bool ComfyClient::IsAvailable() const {
+    const std::string command =
+        "curl -fsS --max-time 10 \"" + base_url_ + "/system_stats\" > /tmp/pixo_comfy_health.json";
+
+    return std::system(command.c_str()) == 0;
+}
+
+bool ComfyClient::UploadImage(
+    const std::filesystem::path& image_path,
+    const std::string& remote_file_name
+) const {
+    if (!std::filesystem::exists(image_path)) {
+        return false;
+    }
+
+    const std::string url = base_url_ + "/upload/image";
+
+    std::string command =
+        "curl -s -X POST "
+        "-F \"image=@" + image_path.string() +
+        ";filename=" + remote_file_name + "\" "
+        "-F \"overwrite=true\" "
+        "\"" + url + "\" > /tmp/pixo_comfy_upload_response.json";
+
+    const int code = std::system(command.c_str());
+
+    return code == 0;
+}
+
+bool ComfyClient::DownloadOutputImage(
+    const std::string& file_name,
+    const std::filesystem::path& destination_path
+) const {
+    std::filesystem::create_directories(destination_path.parent_path());
+
+    const std::string url =
+        base_url_ +
+        "/view?filename=" + file_name +
+        "&type=output&subfolder=";
+
+    const std::string command =
+        "curl -fL -sS "
+        "\"" + url + "\" "
+        "-o \"" + destination_path.string() + "\"";
+
+    const int code = std::system(command.c_str());
+
+    if (code != 0 || !std::filesystem::exists(destination_path)) {
+        std::cout
+            << "[COMFY_DOWNLOAD_ERROR]\n"
+            << "file=" << file_name << "\n"
+            << "url=" << url << "\n"
+            << "code=" << code << "\n"
+            << std::endl;
+
+        return false;
+    }
+
+    std::cout
+        << "[COMFY_DOWNLOAD_OK]\n"
+        << "file=" << file_name << "\n"
+        << "saved=" << destination_path.string() << "\n"
+        << std::endl;
+
+    return true;
+}
+
+std::optional<std::string> ComfyClient::QueuePrompt(
+    const json::object& workflow
+) const {
+    const std::string request_file =
+        "/tmp/pixo_comfy_prompt_request.json";
+
+    const std::string response_file =
+        "/tmp/pixo_comfy_prompt_response.json";
+
+    {
         json::object body;
         body["prompt"] = workflow;
 
-        const auto res = SendRequest(
-            base_url_,
-            http::verb::post,
-            "/prompt",
-            json::serialize(body)
-        );
+        std::ofstream output(request_file, std::ios::binary);
 
-        if (res.result() != http::status::ok) {
+        if (!output.is_open()) {
+            std::cout << "[COMFY_QUEUE_ERROR] cannot open request file\n";
             return std::nullopt;
         }
 
-        auto parsed = ParseObject(res.body());
+        output << json::serialize(body);
+    }
 
-        if (!parsed) {
-            return std::nullopt;
-        }
+    const std::string command =
+        "curl -sS -X POST "
+        "-H \"Content-Type: application/json\" "
+        "--data-binary @" + request_file + " "
+        "\"" + base_url_ + "/prompt\" "
+        "-o " + response_file;
 
-        auto it = parsed->find("prompt_id");
+    const int code = std::system(command.c_str());
 
-        if (it == parsed->end() || !it->value().is_string()) {
-            return std::nullopt;
-        }
+    if (code != 0) {
+        std::cout
+            << "[COMFY_QUEUE_ERROR]\n"
+            << "curlCode=" << code << "\n"
+            << "url=" << base_url_ << "/prompt\n"
+            << std::endl;
 
-        return std::string(it->value().as_string());
-
-    } catch (...) {
         return std::nullopt;
     }
-}
 
-std::optional<json::object> ComfyClient::GetHistory(const std::string& prompt_id) const {
+    std::ifstream input(response_file, std::ios::binary);
+
+    if (!input.is_open()) {
+        std::cout << "[COMFY_QUEUE_ERROR] cannot open response file\n";
+        return std::nullopt;
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+
+    const std::string response_text = buffer.str();
+
+    std::cout
+        << "[COMFY_QUEUE_RESPONSE]\n"
+        << response_text << "\n"
+        << std::endl;
+
+    json::value parsed;
+
     try {
-        const auto res = SendRequest(
-            base_url_,
-            http::verb::get,
-            "/history/" + prompt_id
-        );
-
-        if (res.result() != http::status::ok) {
-            return std::nullopt;
-        }
-
-        return ParseObject(res.body());
-
+        parsed = json::parse(response_text);
     } catch (...) {
+        std::cout << "[COMFY_QUEUE_ERROR] bad json response\n";
         return std::nullopt;
     }
+
+    if (!parsed.is_object()) {
+        return std::nullopt;
+    }
+
+    const json::object& obj = parsed.as_object();
+
+    auto prompt_it = obj.find("prompt_id");
+
+    if (prompt_it == obj.end() || !prompt_it->value().is_string()) {
+        std::cout << "[COMFY_QUEUE_ERROR] prompt_id not found\n";
+        return std::nullopt;
+    }
+
+    return std::string(prompt_it->value().as_string());
 }
 
-std::optional<std::string> ComfyClient::WaitForFirstOutputFile(const std::string& prompt_id,
-                                                               int max_attempts,
-                                                               int delay_ms) const {
+std::optional<json::object> ComfyClient::GetHistory(
+    const std::string& prompt_id
+) const {
+    const std::string response_file =
+        "/tmp/pixo_comfy_history_response.json";
+
+    const std::string command =
+        "curl -sS "
+        "\"" + base_url_ + "/history/" + prompt_id + "\" "
+        "-o " + response_file;
+
+    const int code = std::system(command.c_str());
+
+    if (code != 0) {
+        std::cout
+            << "[COMFY_HISTORY_ERROR]\n"
+            << "curlCode=" << code << "\n"
+            << "promptId=" << prompt_id << "\n"
+            << std::endl;
+
+        return std::nullopt;
+    }
+
+    std::ifstream input(response_file, std::ios::binary);
+
+    if (!input.is_open()) {
+        return std::nullopt;
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+
+    const std::string text = buffer.str();
+
+    if (text.empty()) {
+        return std::nullopt;
+    }
+
+    json::value parsed;
+
+    try {
+        parsed = json::parse(text);
+    } catch (...) {
+        std::cout
+            << "[COMFY_HISTORY_ERROR] bad json\n"
+            << text.substr(0, 500) << "\n"
+            << std::endl;
+
+        return std::nullopt;
+    }
+
+    if (!parsed.is_object()) {
+        return std::nullopt;
+    }
+
+    return parsed.as_object();
+}
+
+std::optional<std::string> ComfyClient::WaitForFirstOutputFile(
+    const std::string& prompt_id,
+    int max_attempts,
+    int delay_ms
+) const {
     for (int attempt = 0; attempt < max_attempts; ++attempt) {
         auto history = GetHistory(prompt_id);
 
@@ -196,46 +348,82 @@ std::optional<std::string> ComfyClient::WaitForFirstOutputFile(const std::string
             auto prompt_it = history->find(prompt_id);
 
             if (prompt_it != history->end() && prompt_it->value().is_object()) {
-                const auto& prompt_obj = prompt_it->value().as_object();
+                const json::object& prompt_obj = prompt_it->value().as_object();
 
                 auto outputs_it = prompt_obj.find("outputs");
 
                 if (outputs_it != prompt_obj.end() && outputs_it->value().is_object()) {
-                    const auto& outputs = outputs_it->value().as_object();
+                    const json::object& outputs = outputs_it->value().as_object();
 
-                    for (const auto& output_node : outputs) {
-                        if (!output_node.value().is_object()) {
+                    for (const auto& output_item : outputs) {
+                        if (!output_item.value().is_object()) {
                             continue;
                         }
 
-                        const auto& node_obj = output_node.value().as_object();
+                        const json::object& output_obj = output_item.value().as_object();
 
-                        auto images_it = node_obj.find("images");
+                        auto images_it = output_obj.find("images");
 
-                        if (images_it == node_obj.end() || !images_it->value().is_array()) {
+                        if (images_it == output_obj.end() || !images_it->value().is_array()) {
                             continue;
                         }
 
-                        const auto& images = images_it->value().as_array();
+                        const json::array& images = images_it->value().as_array();
 
-                        if (images.empty() || !images.front().is_object()) {
-                            continue;
+                        for (const auto& image_value : images) {
+                            if (!image_value.is_object()) {
+                                continue;
+                            }
+
+                            const json::object& image_obj = image_value.as_object();
+
+                            auto filename_it = image_obj.find("filename");
+
+                            if (filename_it != image_obj.end() && filename_it->value().is_string()) {
+                                std::string filename = std::string(filename_it->value().as_string());
+
+                                std::cout
+                                    << "[COMFY_HISTORY_OUTPUT]\n"
+                                    << "promptId=" << prompt_id << "\n"
+                                    << "filename=" << filename << "\n"
+                                    << std::endl;
+
+                                return filename;
+                            }
                         }
+                    }
+                }
 
-                        const auto& image_obj = images.front().as_object();
+                auto status_it = prompt_obj.find("status");
 
-                        auto filename_it = image_obj.find("filename");
+                if (status_it != prompt_obj.end() && status_it->value().is_object()) {
+                    const json::object& status = status_it->value().as_object();
 
-                        if (filename_it != image_obj.end() && filename_it->value().is_string()) {
-                            return std::string(filename_it->value().as_string());
-                        }
+                    auto completed_it = status.find("completed");
+
+                    if (completed_it != status.end() &&
+                        completed_it->value().is_bool() &&
+                        completed_it->value().as_bool()) {
+                        std::cout
+                            << "[COMFY_HISTORY_COMPLETED_WITHOUT_OUTPUT]\n"
+                            << "promptId=" << prompt_id << "\n"
+                            << std::endl;
+
+                        return std::nullopt;
                     }
                 }
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(delay_ms)
+        );
     }
+
+    std::cout
+        << "[COMFY_HISTORY_TIMEOUT]\n"
+        << "promptId=" << prompt_id << "\n"
+        << std::endl;
 
     return std::nullopt;
 }

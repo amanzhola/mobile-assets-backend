@@ -28,6 +28,7 @@ struct GenerationTask {
     std::string template_id;
     int output_count = 1;
     std::string status = "processing";
+    int progress_percent = 0;
     std::vector<std::string> result_image_urls;
 };
 
@@ -82,6 +83,11 @@ private:
         const std::string& fallback_image_url,
         int output_count
     );
+    
+    void UpdateTaskProgress(
+	    const std::string& task_id,
+	    int progress_percent
+	);
 
     std::vector<std::string> RunGenerationViaComfy(
         const json::object& request,

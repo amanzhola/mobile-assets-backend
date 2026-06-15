@@ -249,7 +249,7 @@ http::response<http::string_body> ApiHandler::Handle(
     if (request.method() == http::verb::get && target == "/comfy/health") {
     	json::object body;
     	body["available"] = comfy_client_.IsAvailable();
-    	body["url"] = "http://localhost:8188";
+    	body["url"] = comfy_client_.GetBaseUrl();
 
     	return JsonResponse(request, std::move(body));
     }
