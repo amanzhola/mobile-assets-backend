@@ -11,10 +11,10 @@
   "2": {
     "class_type": "UpscaleModelLoader",
     "inputs": {
-      "model_name": "RealESRGAN_x2plus.pth"
+      "model_name": "4x-UltraSharp.pth"
     },
     "_meta": {
-      "title": "Load RealESRGAN x2plus"
+      "title": "Load 4x UltraSharp"
     }
   },
   "3": {
@@ -30,14 +30,45 @@
       ]
     },
     "_meta": {
-      "title": "AI Enhance / Upscale"
+      "title": "AI Upscale"
     }
   },
   "4": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "3",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": 1536,
+      "height": 1106,
+      "crop": "disabled"
+    },
+    "_meta": {
+      "title": "Downscale To Mobile Size"
+    }
+  },
+  "5": {
+    "class_type": "ImageSharpen",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "sharpen_radius": 2,
+      "sigma": 1,
+      "alpha": 0.8
+    },
+    "_meta": {
+      "title": "Sharpen Enhanced Image"
+    }
+  },
+  "6": {
     "class_type": "SaveImage",
     "inputs": {
       "images": [
-        "3",
+        "5",
         0
       ],
       "filename_prefix": "{{output_prefix}}"
