@@ -195,3 +195,13 @@ git push -u origin feature/catalog-api
 | Branch                | Done                | Android benefit                                  | Backend benefit                  | Next                   |
 | --------------------- | ------------------- | ------------------------------------------------ | -------------------------------- | ---------------------- |
 | `feature/catalog-api` | ✅ Catalog API готов | Android может получать tools/templates с backend | Backend стал источником metadata | `feature/image-upload` |
+
+---
+
+# ⬅️ Navigation
+
+| Repository               | Branch | README                                    |
+| ------------------------ | ------ | ----------------------------------------- |
+| 🚀 Mobile Assets Backend | `main` | [⬅️ Back to Main README](../../README.md) |
+
+---
