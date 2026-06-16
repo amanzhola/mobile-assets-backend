@@ -1,173 +1,304 @@
 # 🚀 feature/ai-enhancer-kaggle-comfy
 
-| Branch                             | Parent                                                                | Цель                                | Главная схема                                                                                              | Где backend   | Где ComfyUI         | Как соединяются                               | Главный фикс                                                   | Android             | Назад                                                                                 |
-| ---------------------------------- | --------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------- | ------------------- | --------------------------------------------- | -------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------- |
-| `feature/ai-enhancer-kaggle-comfy` | `feature/real-ai-enhancer-upscale` / `feature/ai-enhancer-ultrasharp` | Запускать AI Enhancer на Kaggle GPU | Android → локальный C++ backend → Cloudflare Tunnel → Kaggle ComfyUI GPU → backend output → Android Result | WSL / ноутбук | Kaggle Notebook GPU | `COMFY_BASE_URL=https://...trycloudflare.com` | backend upload-ит input image в remote ComfyUI `/upload/image` | Android не меняется | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
+| Branch                             | Parent                                                                | Цель                         | Backend                  | ComfyUI            | Connection                             | Main Result                   | Android            | Back                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------- | ---------------------------- | ------------------------ | ------------------ | -------------------------------------- | ----------------------------- | ------------------ | ------------------------------------------------------------------------------------- |
+| `feature/ai-enhancer-kaggle-comfy` | `feature/ai-enhancer-ultrasharp` / `feature/real-ai-enhancer-upscale` | AI Enhancer через Kaggle GPU | Local C++ backend in WSL | Kaggle ComfyUI GPU | Cloudflare Tunnel via `COMFY_BASE_URL` | `/outputs/...` real AI result | No Android changes | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
 
 ---
 
-## ✅ Что сделано
+## 🧱 Current state
 
-| Блок             | Было                               | Стало                                             | Почему важно                                       | Статус |
-| ---------------- | ---------------------------------- | ------------------------------------------------- | -------------------------------------------------- | ------ |
-| ComfyUI location | локально / CPU                     | Kaggle GPU                                        | быстрее и реальнее для AI workflow                 | ✅      |
-| Backend location | WSL                                | WSL                                               | backend остаётся локальным                         | ✅      |
-| Android base URL | локальный backend                  | без изменений                                     | Android не надо переделывать                       | ✅      |
-| Comfy URL        | `http://localhost:8188`            | `COMFY_BASE_URL` из env                           | можно менять tunnel URL без правки кода            | ✅      |
-| `/comfy/health`  | показывал hardcoded localhost      | показывает `comfy_client_.GetBaseUrl()`           | видно реальный Kaggle URL                          | ✅      |
-| Upload input     | локальный `copy_file`              | remote upload в Kaggle `/upload/image`            | Kaggle не видит файлы WSL напрямую                 | ✅      |
-| Queue prompt     | локальный HTTP                     | HTTPS через Cloudflare                            | backend ставит workflow в очередь Kaggle ComfyUI   | ✅      |
-| History          | локальный `/history`               | remote `/history/{prompt_id}`                     | backend ждёт результат Kaggle                      | ✅      |
-| Output           | backend искал файл локально        | скачивает output через ComfyUI `/view`            | результат переносится из Kaggle в `storage/output` | ✅      |
-| Fallback         | мог вернуть исходник как completed | task становится error, если ComfyUI не дал output | больше нет ложного успеха                          | ✅      |
-| Kaggle setup     | вручную много шагов                | 2 ячейки после Factory Reset                      | быстрый повторяемый запуск                         | ✅      |
+| Area                | Current value                                                                                                                                                                   | Notes                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Current branch      | `feature/ai-enhancer-kaggle-comfy`                                                                                                                                              | рабочая ветка для Kaggle GPU ComfyUI                 |
+| Modified files      | `src/api_handler.cpp`, `src/comfy/workflow_builder.cpp`, `src/comfy/workflow_builder.h`, `src/generation_service.cpp`, `src/generation_service.h`, `workflows/ai_enhancer.json` | изменения перед финальным commit                     |
+| Main architecture   | Android → WSL backend → Cloudflare Tunnel → Kaggle ComfyUI → backend `storage/output` → Android Result                                                                          | backend остаётся локальным                           |
+| Local ComfyUI mode  | `COMFY_BASE_URL=http://localhost:8188`                                                                                                                                          | для WSL/local testing                                |
+| Kaggle ComfyUI mode | `COMFY_BASE_URL=https://xxxx.trycloudflare.com`                                                                                                                                 | для GPU testing                                      |
+| Public backend URL  | `PUBLIC_BASE_URL=http://192.168.0.177:8080`                                                                                                                                     | URL, который Android видит в `/uploads` и `/outputs` |
+| Main rule           | `/uploads/...` = original input, `/outputs/...` = AI result                                                                                                                     | Android должен показывать `/outputs/...`             |
 
 ---
 
-## 🧱 Итоговая архитектура
+## 🔥 Architecture flow
 
-| Layer             | Location          | URL / Path                     | Role                            | Notes                              |
-| ----------------- | ----------------- | ------------------------------ | ------------------------------- | ---------------------------------- |
-| Android           | phone / emulator  | `http://192.168.0.177:8080`    | client                          | ходит только в локальный backend   |
-| C++ backend       | WSL / ноутбук     | `~/mobile-assets-backend`      | API gateway                     | принимает upload/generation/result |
-| Cloudflare Tunnel | Kaggle            | `https://...trycloudflare.com` | bridge                          | внешний URL к Kaggle ComfyUI       |
-| ComfyUI           | Kaggle GPU        | `/kaggle/working/ComfyUI`      | AI worker                       | выполняет workflow                 |
-| Input upload      | backend → Kaggle  | `/upload/image`                | отправка image в remote ComfyUI | обязательно для remote mode        |
-| Prompt queue      | backend → Kaggle  | `/prompt`                      | запуск workflow                 | через `ComfyClient`                |
-| History polling   | backend → Kaggle  | `/history/{prompt_id}`         | ожидание результата             | получает filename                  |
-| Output download   | backend ← Kaggle  | `/view?...`                    | скачать result image            | сохраняется в `storage/output`     |
-| Android Result    | Android ← backend | `/outputs/...png`              | показ результата                | backend отдаёт локальный output    |
-
----
-
-## 🖥 Kaggle Notebook — 2 ячейки после Factory Reset
-
-| Cell   | Назначение | Что делает                                                                     | Результат                                       |
-| ------ | ---------- | ------------------------------------------------------------------------------ | ----------------------------------------------- |
-| Cell 1 | Setup      | clone ComfyUI, install requirements, download checkpoint, download cloudflared | `SETUP DONE`                                    |
-| Cell 2 | Run        | запускает ComfyUI в фоне, запускает Cloudflare tunnel, печатает public URL     | `COMFY_PUBLIC_URL=https://...trycloudflare.com` |
+| Step | From    | To             | Action                           | Result                              |
+| ---- | ------- | -------------- | -------------------------------- | ----------------------------------- |
+| 1    | Android | WSL backend    | upload image                     | file saved to `storage/input`       |
+| 2    | Android | WSL backend    | `POST /generations`              | task created as `processing`        |
+| 3    | Backend | Kaggle ComfyUI | `/upload/image`                  | remote ComfyUI receives input image |
+| 4    | Backend | Kaggle ComfyUI | `/prompt`                        | workflow queued                     |
+| 5    | Backend | Kaggle ComfyUI | `/history/{prompt_id}`           | backend waits for output filename   |
+| 6    | Backend | Kaggle ComfyUI | `/view?filename=...&type=output` | backend downloads result image      |
+| 7    | Backend | Local storage  | save result                      | file saved to `storage/output`      |
+| 8    | Android | Backend        | `GET /generations/{taskId}`      | status becomes `completed`          |
+| 9    | Android | Backend        | `GET /outputs/{file}`            | Result Screen shows AI image        |
 
 ---
 
-## 🖥 WSL Backend запуск
+## ⚙️ Env variables
 
-| Step               | Command / Value                                 | Expected                                   |
-| ------------------ | ----------------------------------------------- | ------------------------------------------ |
-| backend path       | `cd ~/mobile-assets-backend/build`              | build folder                               |
-| public backend URL | `PUBLIC_BASE_URL="http://192.168.0.177:8080"`   | Android получает правильные `/outputs/...` |
-| remote ComfyUI URL | `COMFY_BASE_URL="https://...trycloudflare.com"` | backend ходит в Kaggle                     |
-| run backend        | `./bin/mobile_assets_backend`                   | backend started                            |
-| health check       | `curl http://localhost:8080/comfy/health`       | `available:true` + Kaggle URL              |
+| Variable          | Example                          | Used for                        | Important                              |
+| ----------------- | -------------------------------- | ------------------------------- | -------------------------------------- |
+| `PUBLIC_BASE_URL` | `http://192.168.0.177:8080`      | public URLs returned to Android | must be reachable from phone           |
+| `COMFY_BASE_URL`  | `https://xxxx.trycloudflare.com` | remote ComfyUI URL              | must return JSON from `/system_stats`  |
+| Local fallback    | `http://localhost:8188`          | local ComfyUI                   | used only if `COMFY_BASE_URL` is empty |
 
 ---
 
-## 🧪 Проверки
+## 🧪 Health checks
 
-| Проверка                | Команда / действие                               | Ожидание                           | Если ошибка                  |
-| ----------------------- | ------------------------------------------------ | ---------------------------------- | ---------------------------- |
-| Kaggle local ComfyUI    | `curl 127.0.0.1:8188/system_stats` inside Kaggle | JSON начинается с `{"system":...}` | ComfyUI не запущен           |
-| Cloudflare URL from WSL | `curl "$COMFY_BASE_URL/system_stats"`            | JSON, не HTML                      | tunnel плохой / умер         |
-| Backend health          | `curl localhost:8080/comfy/health`               | `available:true`                   | env не дошёл или tunnel умер |
-| Android AI Enhancer     | Generate                                         | task → processing → completed      | смотреть backend logs        |
-| Backend output          | `curl -I /outputs/file.png`                      | `200 OK`                           | output не скачался           |
-| Kaggle logs             | Notebook log                                     | `got prompt`, `Prompt executed`    | workflow/model issue         |
+| Check                   | Command                                                    | Expected                                                    |
+| ----------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
+| Backend health          | `curl http://localhost:8080/health; echo`                  | `{"status":"ok","service":"mobile_assets_backend"}`         |
+| ComfyUI through backend | `curl http://localhost:8080/comfy/health; echo`            | `{"available":true,"url":"https://xxxx.trycloudflare.com"}` |
+| Kaggle tunnel direct    | `curl "$COMFY_BASE_URL/system_stats" \| head -c 300; echo` | JSON starting with `{"system":`                             |
+| Bad tunnel symptom      | direct curl returns `<!DOCTYPE html>` or HTTP 530          | tunnel is dead or wrong                                     |
 
 ---
 
-## ⚠️ Главные ошибки и исправления
+## 📡 Main endpoints
 
-| Ошибка                               | Симптом                                                            | Причина                                 | Исправление                                                                               |
-| ------------------------------------ | ------------------------------------------------------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Backend всё ещё показывает localhost | `/comfy/health` → `url:"http://localhost:8188"`                    | код не читает env или health hardcoded  | `COMFY_BASE_URL` в `main.cpp`, `GetBaseUrl()` в `ComfyClient`, health берёт URL из client |
-| Cloudflare отдаёт HTML               | `curl "$COMFY_BASE_URL/system_stats"` показывает `<!DOCTYPE html>` | tunnel не ведёт к ComfyUI API           | перезапустить Kaggle ComfyUI + tunnel, взять новый URL                                    |
-| HTTP 530                             | Cloudflare error                                                   | tunnel умер / Kaggle cell остановлена   | перезапустить Cell 2                                                                      |
-| LoadImage cannot find image          | ComfyUI error                                                      | Kaggle не видит файл из WSL             | backend должен вызвать `/upload/image` перед `/prompt`                                    |
-| History empty `{}`                   | backend ждёт output, но history пустая                             | prompt ещё не готов или wrong prompt id | polling / проверить queue response                                                        |
-| Backend искал output локально        | result не найден                                                   | output лежит на Kaggle, не в WSL        | скачать через ComfyUI `/view`                                                             |
-| Completed с исходником               | Android видел input как result                                     | ложный fallback                         | убрать fallback на success, делать task `error`                                           |
-| QueuePrompt не работает через HTTPS  | no prompt id                                                       | старый local-only HTTP client           | curl-based HTTPS call / поддержка remote URL                                              |
-| Kaggle после Factory Reset пустой    | нет ComfyUI/model/cloudflared                                      | reset очищает `/kaggle/working`         | запускать 2 setup cells заново                                                            |
+| Endpoint                       | Method | Purpose               | Storage              | Success result                        |
+| ------------------------------ | ------ | --------------------- | -------------------- | ------------------------------------- |
+| `/images/upload`               | `POST` | upload original image | `storage/input`      | returns `/uploads/{file}`             |
+| `/uploads/{filename}`          | `GET`  | serve original image  | `storage/input`      | original file                         |
+| `/generations`                 | `POST` | create AI task        | `storage/tasks.json` | `processing`, `progressPercent: 0`    |
+| `/generations/{taskId}`        | `GET`  | check task status     | task storage         | `processing`, `completed`, or `error` |
+| `/generations/{taskId}/result` | `GET`  | get result URLs       | task storage         | `/outputs/...`                        |
+| `/outputs/{filename}`          | `GET`  | serve generated image | `storage/output`     | AI result image                       |
+| `/comfy/health`                | `GET`  | check ComfyUI         | remote/local ComfyUI | `available:true`                      |
 
 ---
 
-## 🔄 Правильный порядок веток
+## ✅ Fixes already made
 
-| Order | Branch                             | Meaning                                         | Status               |
-| ----- | ---------------------------------- | ----------------------------------------------- | -------------------- |
-| 1     | `feature/prompt-multi-image-comfy` | multi-image prompt через ComfyUI copy pipeline  | база                 |
-| 2     | `feature/real-ai-enhancer-upscale` | real AI enhancer через local RealESRGAN / async | качество локально    |
-| 3     | `feature/ai-enhancer-ultrasharp`   | эксперимент качества UltraSharp                 | experiment           |
-| 4     | `feature/ai-enhancer-kaggle-comfy` | remote Kaggle GPU infrastructure                | текущая рабочая база |
-
----
-
-## 🧠 Почему эта ветка важнее локальной
-
-| Локальный режим                   | Kaggle режим                          |
-| --------------------------------- | ------------------------------------- |
-| backend и ComfyUI на одной машине | backend локально, ComfyUI remote      |
-| `copy_file` работает              | `copy_file` недостаточно              |
-| output можно искать локально      | output надо скачивать через `/view`   |
-| CPU медленно                      | GPU быстрее                           |
-| проще отладка                     | ближе к real AI backend architecture  |
-| подходит для copy workflow        | подходит для SDXL / heavier workflows |
+| Problem                | Old behavior                                                          | Fixed behavior                                                       | Why it matters         |
+| ---------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------- |
+| False success fallback | ComfyUI failed, backend returned `/uploads/original.jpg` as completed | ComfyUI failed → task becomes `error`, `resultImageUrls=[]`          | no fake AI result      |
+| Progress stuck         | Android saw `0%` forever                                              | `progressPercent`: `0 → 5 → 10 → 20 → 30 → 40 → 85 → 92 → 95 → 100`  | Android progress works |
+| Remote output location | backend searched local `~/ComfyUI/output`                             | backend downloads from Kaggle `/view`                                | remote mode works      |
+| HTTPS tunnel           | old HTTP logic unstable                                               | curl-based calls for `/prompt`, `/history`, `/view`, `/upload/image` | Cloudflare works       |
+| Hardcoded health URL   | `/comfy/health` showed `localhost:8188`                               | shows `comfy_client_.GetBaseUrl()`                                   | real diagnostics       |
+| Wrong task output      | task A could receive task B file                                      | prefix check + unique seed + serialized jobs                         | correct result binding |
+| Parallel ComfyUI race  | many jobs could overlap                                               | mutex serializes ComfyUI jobs                                        | safer on Kaggle        |
 
 ---
 
-## 🎯 Что продолжать именно в этой ветке
+## 🔒 ComfyUI job serialization
 
-| Следующий шаг   | Что менять                   | Почему                         |
-| --------------- | ---------------------------- | ------------------------------ |
-| Denoise tests   | `workflows/ai_enhancer.json` | найти баланс качества          |
-| `denoise=0.18`  | workflow parameter           | сильнее сохраняет оригинал     |
-| `denoise=0.22`  | workflow parameter           | умеренный enhancer             |
-| `denoise=0.26`  | workflow parameter           | больше улучшений               |
-| `denoise=0.30`  | workflow parameter           | может менять лицо/шапку/детали |
-| Negative prompt | workflow prompt              | уменьшить артефакты            |
-| Steps / sampler | workflow                     | скорость/качество              |
-| Better model    | checkpoint                   | качество результата            |
-| Face restore    | отдельный workflow node      | позже, если нужно              |
+| Item                 | Value                                                         | Meaning                             |
+| -------------------- | ------------------------------------------------------------- | ----------------------------------- |
+| Mutex                | `std::mutex comfy_generation_mutex_`                          | one ComfyUI job at a time           |
+| Lock place           | `RunGenerationViaComfy`                                       | serializes actual ComfyUI execution |
+| Android behavior     | many tasks can be created immediately                         | tasks wait internally               |
+| Current status model | `processing`                                                  | later can add `queued`              |
+| Why                  | avoid race, cache mismatch, wrong output prefix, GPU overload | safe production-test mode           |
 
 ---
 
-## 📌 Ключевые env variables
+## 🎛️ AI Enhancer modes
 
-| Variable          | Example                         | Used by             | Meaning                 |
-| ----------------- | ------------------------------- | ------------------- | ----------------------- |
-| `PUBLIC_BASE_URL` | `http://192.168.0.177:8080`     | backend output URLs | URL backend для Android |
-| `COMFY_BASE_URL`  | `https://abc.trycloudflare.com` | `ComfyClient`       | remote ComfyUI URL      |
-| none              | default `http://localhost:8188` | local fallback      | локальный ComfyUI режим |
-
----
-
-## 🧾 Git
-
-| Action        | Command                                                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| create branch | `git checkout -b feature/ai-enhancer-kaggle-comfy`                                                                        |
-| check status  | `git status`                                                                                                              |
-| add files     | `git add src/main.cpp src/comfy/comfy_client.h src/comfy/comfy_client.cpp src/generation_service.cpp src/api_handler.cpp` |
-| commit        | `git commit -m "Support remote ComfyUI over Kaggle tunnel"`                                                               |
-| push          | `git push -u origin feature/ai-enhancer-kaggle-comfy`                                                                     |
+| Android mode    | Backend option     | Purpose                                    | Prompt direction                                            | Denoise |
+| --------------- | ------------------ | ------------------------------------------ | ----------------------------------------------------------- | ------- |
+| HD-улучшение    | `hd_enhance`       | universal quality/detail/sharpness restore | preserve exact person/clothes/composition, improve details  | `0.22`  |
+| Ретушь портрета | `portrait_retouch` | face/skin portrait retouch                 | preserve identity, natural skin texture, clean portrait     | `0.18`  |
+| Коррекция света | `light_fix`        | exposure/shadows/highlights                | preserve composition, improve brightness and balanced light | `0.16`  |
+| Усиление цвета  | `color_boost`      | contrast/color/saturation                  | richer natural colors, better contrast                      | `0.17`  |
 
 ---
 
-## 🏁 Итог
+## 🧩 Workflow placeholders
 
-| Возможность                                      | Статус |
-| ------------------------------------------------ | ------ |
-| Android работает с локальным backend             | ✅      |
-| Backend ходит в Kaggle ComfyUI через Cloudflare  | ✅      |
-| `COMFY_BASE_URL` управляет remote URL            | ✅      |
-| `/comfy/health` показывает реальный URL          | ✅      |
-| Input image загружается в Kaggle `/upload/image` | ✅      |
-| Prompt ставится в remote ComfyUI                 | ✅      |
-| History читается с remote ComfyUI                | ✅      |
-| Output скачивается из Kaggle через `/view`       | ✅      |
-| Result сохраняется в backend `storage/output`    | ✅      |
-| Android получает `/outputs/...`                  | ✅      |
-| Ложный fallback убран                            | ✅      |
-| Текущая ветка — база для дальнейшего качества    | ✅      |
+| Placeholder           | Meaning                | Type rule          |
+| --------------------- | ---------------------- | ------------------ |
+| `{{input_image}}`     | ComfyUI input filename | string             |
+| `{{output_prefix}}`   | unique output prefix   | string             |
+| `{{positive_prompt}}` | mode-specific prompt   | string             |
+| `{{negative_prompt}}` | anti-artifact prompt   | string             |
+| `{{denoise}}`         | img2img denoise value  | number, not string |
+| `{{seed}}`            | unique seed per task   | number, not string |
+
+| Correct JSON style       | Wrong JSON style           |
+| ------------------------ | -------------------------- |
+| `"seed": {{seed}}`       | `"seed": "{{seed}}"`       |
+| `"denoise": {{denoise}}` | `"denoise": "{{denoise}}"` |
+
+---
+
+## 🖥 Kaggle setup
+
+| Step | Location          | Command / Action                               | Expected                   |
+| ---- | ----------------- | ---------------------------------------------- | -------------------------- |
+| 1    | Kaggle Notebook   | GPU enabled                                    | T4/P100/L4 visible         |
+| 2    | `/kaggle/working` | clone ComfyUI                                  | `/kaggle/working/ComfyUI`  |
+| 3    | ComfyUI           | install requirements                           | dependencies ready         |
+| 4    | checkpoints       | download `Juggernaut-XL_Lightning.safetensors` | checkpoint exists          |
+| 5    | ComfyUI           | run on `0.0.0.0:8188`                          | local Kaggle ComfyUI works |
+| 6    | Kaggle            | run Cloudflare tunnel                          | public URL printed         |
+| 7    | WSL               | test `COMFY_BASE_URL/system_stats`             | JSON response              |
+
+---
+
+## 🚀 Backend run for Kaggle
+
+| Step  | Command                                                                                                                   |
+| ----- | ------------------------------------------------------------------------------------------------------------------------- |
+| Build | `cd ~/mobile-assets-backend/build && cmake --build .`                                                                     |
+| Run   | `PUBLIC_BASE_URL="http://192.168.0.177:8080" COMFY_BASE_URL="https://xxxx.trycloudflare.com" ./bin/mobile_assets_backend` |
+| Check | `curl http://localhost:8080/comfy/health; echo`                                                                           |
+
+---
+
+## 🧪 Test one mode
+
+| Step                    | Value                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| Mode                    | `hd_enhance`                                                                 |
+| Endpoint                | `POST /generations`                                                          |
+| Expected first response | `status=processing`, `progressPercent=0`                                     |
+| Poll endpoint           | `GET /generations/{taskId}`                                                  |
+| Expected final response | `status=completed`, `progressPercent=100`, `resultImageUrls[0]=/outputs/...` |
+
+---
+
+## 🧪 Test all 4 modes
+
+| Mode               | Expected                                          |
+| ------------------ | ------------------------------------------------- |
+| `hd_enhance`       | stronger general enhancement                      |
+| `portrait_retouch` | conservative portrait cleanup                     |
+| `light_fix`        | lighting/exposure improvement                     |
+| `color_boost`      | richer color and contrast                         |
+| All modes          | result must be `/outputs/...`, not `/uploads/...` |
+
+---
+
+## 📥 Download result
+
+| Step               | Command                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| Extract output URL | `OUTPUT_URL=$(curl -s http://localhost:8080/generations/$TASK_ID \| jq -r '.resultImageUrls[0]')` |
+| Download           | `curl -o /tmp/ai_enhancer_result.png "$OUTPUT_URL"`                                               |
+| Check file         | `file /tmp/ai_enhancer_result.png && ls -lh /tmp/ai_enhancer_result.png`                          |
+| Windows path       | `wslpath -w /tmp/ai_enhancer_result.png`                                                          |
+
+---
+
+## 📱 Android behavior
+
+| Android step       | Backend expectation               | Correct result           |
+| ------------------ | --------------------------------- | ------------------------ |
+| AI Enhancer screen | sends `serverAction=ai_enhancer`  | task created             |
+| Mode selected      | sends `options.enhanceMode`       | mode prompt selected     |
+| Generate           | backend returns `processing` fast | Android starts polling   |
+| Progress           | `progressPercent` updates         | UI progress moves        |
+| Result             | backend returns `/outputs/...`    | Android shows AI image   |
+| Warning            | if Android shows `/uploads/...`   | old fallback or old task |
+
+---
+
+## 🧨 Errors and meaning
+
+| Error / Symptom                 | Meaning                                | Fix                                         |
+| ------------------------------- | -------------------------------------- | ------------------------------------------- |
+| `/comfy/health available:false` | ComfyUI unavailable                    | check Kaggle, tunnel, env URL               |
+| HTML from tunnel                | Cloudflare URL not serving ComfyUI API | restart tunnel, get new URL                 |
+| HTTP 530                        | tunnel died                            | restart Kaggle tunnel cell                  |
+| `prompt_id not found`           | ComfyUI rejected workflow              | inspect queue response                      |
+| `ckpt_name not in list`         | checkpoint missing                     | download checkpoint to `models/checkpoints` |
+| `model_name not in []`          | upscale model missing                  | install required upscale model              |
+| completed but empty result      | invalid state                          | should be `error`, not completed            |
+| prefix mismatch                 | output belongs to another task         | prefix-check rejects it                     |
+| output is original image        | false fallback returned `/uploads`     | fallback must not mark completed            |
+
+---
+
+## 🌿 Branch history
+
+| #  | Branch                             | Purpose                         |
+| -- | ---------------------------------- | ------------------------------- |
+| 1  | `main` / `mobile-assets-backend`   | базовый C++ backend             |
+| 2  | `feature/catalog-api`              | `/tools`, `/templates`          |
+| 3  | `feature/image-upload`             | image upload to `storage/input` |
+| 4  | `feature/task-storage`             | tasks persistence               |
+| 5  | `template-prompt-mapping`          | `templateId → prompt`           |
+| 6  | `feature/serve-uploads`            | serve `/uploads`                |
+| 7  | `feature/local-mock-results`       | stable Android mock result      |
+| 8  | `feature/comfyui-worker`           | first ComfyUI integration       |
+| 9  | `feature/prompt-multi-image-comfy` | prompt multi-image pipeline     |
+| 10 | `feature/real-ai-enhancer-upscale` | first real AI enhancer          |
+| 11 | `feature/ai-enhancer-ultrasharp`   | local UltraSharp experiment     |
+| 12 | `feature/ai-enhancer-kaggle-comfy` | Kaggle GPU remote ComfyUI       |
+
+---
+
+## 📌 Current modified files before commit
+
+| File                             | Purpose                                                             |
+| -------------------------------- | ------------------------------------------------------------------- |
+| `src/api_handler.cpp`            | health/result/response handling                                     |
+| `src/comfy/workflow_builder.cpp` | placeholder replacement                                             |
+| `src/comfy/workflow_builder.h`   | workflow builder API                                                |
+| `src/generation_service.cpp`     | async AI generation, progress, mode handling, ComfyUI serialization |
+| `src/generation_service.h`       | task fields, mutex, method declarations                             |
+| `workflows/ai_enhancer.json`     | SDXL/Juggernaut AI Enhancer workflow                                |
+
+---
+
+## 🧾 Commit
+
+| Step   | Command                                                                                                                                                                  |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| status | `git status`                                                                                                                                                             |
+| add    | `git add src/api_handler.cpp src/comfy/workflow_builder.cpp src/comfy/workflow_builder.h src/generation_service.cpp src/generation_service.h workflows/ai_enhancer.json` |
+| commit | `git commit -m "Add Kaggle AI enhancer modes and serialized ComfyUI jobs"`                                                                                               |
+| push   | `git push -u origin feature/ai-enhancer-kaggle-comfy`                                                                                                                    |
+
+---
+
+## ⚠️ Current known limitation
+
+| Issue                                                 | Current rule                                               |
+| ----------------------------------------------------- | ---------------------------------------------------------- |
+| SDXL/Juggernaut may change details if denoise is high | keep denoise low                                           |
+| Best old-photo range                                  | `0.18–0.22`                                                |
+| Portrait-safe range                                   | `0.16–0.18`                                                |
+| Stronger but riskier                                  | `0.28+`                                                    |
+| Next quality work                                     | tune prompt, negative prompt, denoise, steps, cfg, sampler |
+
+---
+
+## 🔜 Next steps
+
+| Priority | Step                                                                          | Why                                                     |
+| -------- | ----------------------------------------------------------------------------- | ------------------------------------------------------- |
+| 1        | visually compare `hd_enhance`, `portrait_retouch`, `light_fix`, `color_boost` | choose best mode settings                               |
+| 2        | add status `queued`                                                           | current mutex makes tasks wait while still `processing` |
+| 3        | separate workflows per mode                                                   | better quality per use case                             |
+| 4        | portrait workflow with face restoration                                       | better face quality                                     |
+| 5        | stable GPU deployment                                                         | Cloudflare tunnel is temporary                          |
+| 6        | production options                                                            | Yandex Cloud GPU, RunPod, Vast.ai, Modal, dedicated API |
+
+---
+
+## 🏁 Final result
+
+| Capability                                        | Status |
+| ------------------------------------------------- | ------ |
+| Android uses local backend                        | ✅      |
+| Backend uses Kaggle ComfyUI GPU                   | ✅      |
+| ComfyUI URL configurable through `COMFY_BASE_URL` | ✅      |
+| Remote input upload works through `/upload/image` | ✅      |
+| Queue prompt works through HTTPS tunnel           | ✅      |
+| History polling works                             | ✅      |
+| Output download through `/view` works             | ✅      |
+| Result saved to `storage/output`                  | ✅      |
+| Android receives `/outputs/...`                   | ✅      |
+| No false completed fallback to original image     | ✅      |
+| Progress percent works                            | ✅      |
+| 4 AI Enhancer modes supported                     | ✅      |
+| ComfyUI jobs serialized safely                    | ✅      |
 
 ---
 

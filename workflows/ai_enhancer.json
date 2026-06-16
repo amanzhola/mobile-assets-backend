@@ -3,63 +3,72 @@
     "class_type": "LoadImage",
     "inputs": {
       "image": "{{input_image}}"
-    },
-    "_meta": {
-      "title": "Load Image"
     }
   },
   "2": {
-    "class_type": "UpscaleModelLoader",
+    "class_type": "CheckpointLoaderSimple",
     "inputs": {
-      "model_name": "4x-UltraSharp.pth"
-    },
-    "_meta": {
-      "title": "Load 4x UltraSharp"
+      "ckpt_name": "Juggernaut-XL_Lightning.safetensors"
     }
   },
   "3": {
-    "class_type": "ImageUpscaleWithModel",
+    "class_type": "ImageScale",
     "inputs": {
-      "upscale_model": [
-        "2",
-        0
-      ],
-      "image": [
-        "1",
-        0
-      ]
-    },
-    "_meta": {
-      "title": "AI Enhance UltraSharp"
+      "image": ["1", 0],
+      "upscale_method": "lanczos",
+      "width": 1024,
+      "height": 768,
+      "crop": "disabled"
     }
   },
   "4": {
-    "class_type": "ImageScale",
+    "class_type": "VAEEncode",
     "inputs": {
-      "image": [
-        "3",
-        0
-      ],
-      "upscale_method": "lanczos",
-      "width": 1536,
-      "height": 1106,
-      "crop": "disabled"
-    },
-    "_meta": {
-      "title": "Downscale To Mobile Size"
+      "pixels": ["3", 0],
+      "vae": ["2", 2]
     }
   },
   "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "{{positive_prompt}}",
+      "clip": ["2", 1]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "{{negative_prompt}}",
+      "clip": ["2", 1]
+    }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "{{seed}}",
+      "steps": 8,
+      "cfg": 1.8,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": "{{denoise}}",
+      "model": ["2", 0],
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["4", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["2", 2]
+    }
+  },
+  "9": {
     "class_type": "SaveImage",
     "inputs": {
-      "images": [
-        "4",
-        0
-      ],
+      "images": ["8", 0],
       "filename_prefix": "{{output_prefix}}"
-    },
-    "_meta": {
-      "title": "Save Enhanced Image"
     }
   }
 }

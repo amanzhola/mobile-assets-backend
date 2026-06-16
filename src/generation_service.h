@@ -100,7 +100,8 @@ private:
         const std::string& input_file_name,
         const std::string& task_id,
         const std::string& server_action,
-        int image_index
+        int image_index,
+        const std::string& enhance_mode
     );
 
     std::optional<std::string> FindNewestComfyOutputByPrefix(
@@ -118,6 +119,7 @@ private:
     fs::path storage_file_;
     std::atomic_uint64_t next_task_id_{1};
     std::unordered_map<std::string, GenerationTask> tasks_;
+    std::mutex comfy_generation_mutex_;
     mutable std::mutex tasks_mutex_;
 
     fs::path templates_file_;

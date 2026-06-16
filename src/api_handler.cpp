@@ -260,7 +260,8 @@ http::response<http::string_body> ApiHandler::Handle(
     	try {
         	json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
             		"pixo_test.jpg",
-            		"pixo_test_output"
+            		"pixo_test_output",
+            		"hd_enhance"
         	);
 
         	auto prompt_id = comfy_client_.QueuePrompt(workflow);
@@ -310,7 +311,8 @@ http::response<http::string_body> ApiHandler::Handle(
 	
 	        json::object workflow = workflow_builder_.BuildAiEnhancerWorkflow(
 	            "pixo_test.jpg",
-	            output_prefix
+	            output_prefix,
+	            "hd_enhance"
 	        );
 	
 	        auto prompt_id = comfy_client_.QueuePrompt(workflow);

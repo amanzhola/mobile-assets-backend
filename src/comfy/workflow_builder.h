@@ -17,12 +17,14 @@ public:
     json::object BuildWorkflow(
         const std::string& server_action,
         const std::string& input_image_file_name,
-        const std::string& output_prefix
+        const std::string& output_prefix,
+        const std::string& enhance_mode
     ) const;
 
     json::object BuildAiEnhancerWorkflow(
         const std::string& input_image_file_name,
-        const std::string& output_prefix
+        const std::string& output_prefix,
+        const std::string& enhance_mode
     ) const;
 
 private:
@@ -31,7 +33,11 @@ private:
     static void ReplacePlaceholders(
         json::value& value,
         const std::string& input_image_file_name,
-        const std::string& output_prefix
+        const std::string& output_prefix,
+        const std::string& positive_prompt,
+        const std::string& negative_prompt,
+        double denoise,
+        int64_t seed
     );
 
 private:

@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
+#include <string_view>
 
 namespace generation {
 
@@ -21,6 +22,26 @@ namespace {
 
 boost::json::string_view ToJsonKey(std::string_view key) {
     return boost::json::string_view(key.data(), key.size());
+}
+
+std::string ReadOptionString(
+    const json::object& obj,
+    std::string_view key
+) {
+    auto options_it = obj.find("options");
+
+    if (options_it == obj.end() || !options_it->value().is_object()) {
+        return {};
+    }
+
+    const auto& options = options_it->value().as_object();
+    auto value_it = options.find(ToJsonKey(key));
+
+    if (value_it == options.end() || !value_it->value().is_string()) {
+        return {};
+    }
+
+    return std::string(value_it->value().as_string());
 }
 
 std::string ReadStringOrEmpty(const json::object& obj, std::string_view key) {
@@ -481,7 +502,8 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
     const std::string& input_file_name,
     const std::string& task_id,
     const std::string& server_action,
-    int image_index
+    int image_index,
+    const std::string& enhance_mode
 ) {
     try {
         fs::create_directories(comfy_input_dir_);
@@ -522,7 +544,8 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
         json::object workflow = workflow_builder_.BuildWorkflow(
             server_action,
             input_file_name,
-            output_prefix
+            output_prefix,
+            enhance_mode
         );
 
         auto prompt_id = comfy_client_.QueuePrompt(workflow);
@@ -539,6 +562,20 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             240,
             1000
         );
+        
+        if (
+		    comfy_output_file_name &&
+		    !comfy_output_file_name->starts_with(output_prefix)
+		) {
+		    std::cout
+		        << "[COMFY_OUTPUT_PREFIX_MISMATCH]\n"
+		        << "taskId=" << task_id << "\n"
+		        << "expectedPrefix=" << output_prefix << "\n"
+		        << "actualFile=" << *comfy_output_file_name << "\n"
+		        << std::endl;
+		
+		    comfy_output_file_name = std::nullopt;
+		}
 
         if (!comfy_output_file_name) {
             comfy_output_file_name =
@@ -596,6 +633,10 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
     const std::string& server_action,
     int output_count
 ) {
+	UpdateTaskProgress(task_id, 1);
+	std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+	
+	UpdateTaskProgress(task_id, 10);
     std::vector<std::string> result_urls;
 
     const std::vector<std::string> input_file_names = ExtractUploadedFileNames(request);
@@ -603,6 +644,8 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
     if (input_file_names.empty()) {
         return result_urls;
     }
+    
+    const std::string enhance_mode = ReadOptionString(request, "enhanceMode");
 
     if (server_action == "prompt") {
         int image_index = 0;
@@ -612,7 +655,8 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
                 input_file_name,
                 task_id,
                 server_action,
-                image_index
+                image_index,
+                enhance_mode
             );
 
             if (output_url) {
@@ -629,7 +673,8 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
         input_file_names.front(),
         task_id,
         server_action,
-        0
+        0,
+        enhance_mode
     );
 
     if (output_url) {
