@@ -302,6 +302,14 @@
 
 ---
 
+## 🖼️ AI Enhancer visual results
+
+| Original input | HD Enhance | Portrait Retouch | Light Fix | Color Boost |
+|---|---|---|---|---|
+| ![Original](readme_assets/ai_enhancer/original.jpg) | ![HD Enhance](readme_assets/ai_enhancer/hd_enhance.png) | ![Portrait Retouch](readme_assets/ai_enhancer/portrait_retouch.png) | ![Light Fix](readme_assets/ai_enhancer/light_fix.png) | ![Color Boost](readme_assets/ai_enhancer/color_boost.png) |
+
+---
+
 ## ⬅️ Назад
 
 | Link        | URL                                                                    |
