@@ -8,20 +8,20 @@ Backend для AI-генерации изображений, шаблонов, u
 
 Каждая большая функциональность развивается в отдельной ветке и имеет собственный README.
 
-| Branch                             | Назначение                      | Основная функциональность                 | README                                                                                                     |
-| ---------------------------------- | ------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `main`                             | Главная ветка проекта           | Навигационный центр и базовая архитектура | текущий README                                                                                             |
-| `feature/catalog-api`              | Каталог инструментов и шаблонов | `/tools`, `/templates`, CatalogService    | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/catalog-api/README.md)              |
-| `feature/image-upload`             | Загрузка изображений            | multipart upload, imageId                 | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/image-upload/README.md)             |
-| `feature/task-storage`             | Постоянное хранение задач       | tasks.json, persistence                   | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/task-storage/README.md)             |
-| `template-prompt-mapping`          | Связь templateId и prompt       | prompt mapping                            | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/template-prompt-mapping/README.md)          |
-| `feature/serve-uploads`            | Раздача загруженных файлов      | `/uploads/{file}`                         | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/serve-uploads/README.md)            |
-| `feature/local-mock-results`       | Mock-генерация                  | fake results                              | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/local-mock-results/README.md)       |
-| `feature/comfyui-worker`           | Worker для ComfyUI              | queue + workflow execution                | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/comfyui-worker/README.md)           |
-| `feature/prompt-multi-image-comfy` | Multi-image режим               | 1-4 images                                | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/prompt-multi-image-comfy/README.md) |
-| `feature/real-ai-enhancer-upscale` | Реальный upscale                | Real workflow                             | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/real-ai-enhancer-upscale/README.md) |
-| `feature/ai-enhancer-ultrasharp`   | UltraSharp enhancer             | sharpen workflow                          | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/ai-enhancer-ultrasharp/README.md)   |
-| `feature/ai-enhancer-kaggle-comfy` | Kaggle + ComfyUI                | external workflows                        | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/ai-enhancer-kaggle-comfy/README.md) |
+| Branch                             | Назначение                      | Основная функциональность                 | README                                                                                                           |
+| ---------------------------------- | ------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `main`                             | Главная ветка проекта           | Навигационный центр и базовая архитектура | текущий README                                                                                                   |
+| `feature/catalog-api`              | Каталог инструментов и шаблонов | `/tools`, `/templates`, CatalogService    | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/catalog-api/README.md)              |
+| `feature/image-upload`             | Загрузка изображений            | multipart upload, imageId                 | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/image-upload/README.md)             |
+| `feature/task-storage`             | Постоянное хранение задач       | tasks.json, persistence                   | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/task-storage/README.md)             |
+| `template-prompt-mapping`          | Связь templateId и prompt       | prompt mapping                            | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/template-prompt-mapping/README.md)          |
+| `feature/serve-uploads`            | Раздача загруженных файлов      | `/uploads/{file}`                         | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/serve-uploads/README.md)            |
+| `feature/local-mock-results`       | Mock-генерация                  | fake results                              | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/local-mock-results/README.md)       |
+| `feature/comfyui-worker`           | Worker для ComfyUI              | queue + workflow execution                | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/comfyui-worker/README.md)           |
+| `feature/prompt-multi-image-comfy` | Multi-image режим               | 1-4 images                                | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/prompt-multi-image-comfy/README.md) |
+| `feature/real-ai-enhancer-upscale` | Реальный upscale                | Real workflow                             | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/real-ai-enhancer-upscale/README.md) |
+| `feature/ai-enhancer-ultrasharp`   | UltraSharp enhancer             | sharpen workflow                          | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/ai-enhancer-ultrasharp/README.md)   |
+| `feature/ai-enhancer-kaggle-comfy` | Kaggle + ComfyUI                | external workflows                        | [README](https://github.com/amanzholaimov/mobile-assets-backend/blob/feature/ai-enhancer-kaggle-comfy/README.md) |
 
 ---
 
