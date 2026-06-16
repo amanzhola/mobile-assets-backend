@@ -6,22 +6,60 @@ Backend для AI-генерации изображений, шаблонов, u
 
 # 📚 Branches
 
-Каждая большая функциональность развивается в отдельной ветке.
+Каждая большая функциональность развивается в отдельной ветке и имеет собственный README.
 
-| Branch                             | Описание                       | README         |
-| ---------------------------------- | ------------------------------ | -------------- |
-| `main`                             | Главная ветка проекта          | текущий README |
-| `feature/catalog-api`              | API каталога tools и templates | README branch  |
-| `feature/image-upload`             | Upload изображений             | README branch  |
-| `feature/task-storage`             | Хранение задач и результатов   | README branch  |
-| `template-prompt-mapping`          | Связь templateId → prompt      | README branch  |
-| `feature/serve-uploads`            | Раздача uploaded файлов        | README branch  |
-| `feature/local-mock-results`       | Mock-результаты генерации      | README branch  |
-| `feature/comfyui-worker`           | Интеграция с ComfyUI           | README branch  |
-| `feature/prompt-multi-image-comfy` | Multi-image prompt workflow    | README branch  |
-| `feature/real-ai-enhancer-upscale` | Реальный upscale workflow      | README branch  |
-| `feature/ai-enhancer-ultrasharp`   | UltraSharp enhancer            | README branch  |
-| `feature/ai-enhancer-kaggle-comfy` | Kaggle + ComfyUI workflows     | README branch  |
+| Branch                             | Назначение                      | Основная функциональность                 | README                                                                                                     |
+| ---------------------------------- | ------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `main`                             | Главная ветка проекта           | Навигационный центр и базовая архитектура | текущий README                                                                                             |
+| `feature/catalog-api`              | Каталог инструментов и шаблонов | `/tools`, `/templates`, CatalogService    | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/catalog-api/README.md)              |
+| `feature/image-upload`             | Загрузка изображений            | multipart upload, imageId                 | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/image-upload/README.md)             |
+| `feature/task-storage`             | Постоянное хранение задач       | tasks.json, persistence                   | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/task-storage/README.md)             |
+| `template-prompt-mapping`          | Связь templateId и prompt       | prompt mapping                            | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/template-prompt-mapping/README.md)          |
+| `feature/serve-uploads`            | Раздача загруженных файлов      | `/uploads/{file}`                         | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/serve-uploads/README.md)            |
+| `feature/local-mock-results`       | Mock-генерация                  | fake results                              | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/local-mock-results/README.md)       |
+| `feature/comfyui-worker`           | Worker для ComfyUI              | queue + workflow execution                | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/comfyui-worker/README.md)           |
+| `feature/prompt-multi-image-comfy` | Multi-image режим               | 1-4 images                                | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/prompt-multi-image-comfy/README.md) |
+| `feature/real-ai-enhancer-upscale` | Реальный upscale                | Real workflow                             | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/real-ai-enhancer-upscale/README.md) |
+| `feature/ai-enhancer-ultrasharp`   | UltraSharp enhancer             | sharpen workflow                          | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/ai-enhancer-ultrasharp/README.md)   |
+| `feature/ai-enhancer-kaggle-comfy` | Kaggle + ComfyUI                | external workflows                        | [README](https://github.com/<OWNER>/mobile-assets-backend/blob/feature/ai-enhancer-kaggle-comfy/README.md) |
+
+---
+
+# 🖥 Terminal 1 — Build + Run + Git
+
+| Назначение             | Команда                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| Перейти в проект       | `cd ~/mobile-assets-backend`                                                          |
+| Посмотреть ветку       | `git branch`                                                                          |
+| Переключиться на main  | `git checkout main`                                                                   |
+| Получить изменения     | `git pull`                                                                            |
+| Очистить build         | `rm -rf build`                                                                        |
+| Создать build          | `mkdir build && cd build`                                                             |
+| Установить зависимости | `conan install .. --build=missing -s build_type=Debug -s compiler.libcxx=libstdc++11` |
+| Конфигурация           | `cmake .. -DCMAKE_BUILD_TYPE=Debug`                                                   |
+| Сборка                 | `cmake --build .`                                                                     |
+| Запуск                 | `./bin/mobile_assets_backend`                                                         |
+| Проверить процессы     | `ps aux \| grep mobile_assets_backend`                                                |
+| Остановить процесс     | `pkill mobile_assets_backend`                                                         |
+
+---
+
+# 🖥 Terminal 2 — API Tests
+
+| Endpoint             | Команда                                                                 |
+| -------------------- | ----------------------------------------------------------------------- |
+| Health               | `curl http://localhost:8080/health`                                     |
+| Tools                | `curl http://localhost:8080/tools`                                      |
+| Templates            | `curl http://localhost:8080/templates`                                  |
+| Создать задачу       | `curl -X POST http://localhost:8080/generations ...`                    |
+| Получить статус      | `curl http://localhost:8080/generations/mock_task_1`                    |
+| Получить результат   | `curl http://localhost:8080/generations/mock_task_1/result`             |
+| Повторить генерацию  | `curl -X POST http://localhost:8080/generations/mock_task_1/regenerate` |
+| Проверить порт       | `ss -tulpn \| grep 8080`                                                |
+| Проверить логи       | `tail -f log.txt`                                                       |
+| Проверить JSON       | `curl ... \| jq`                                                        |
+| Проверить код ответа | `curl -i http://localhost:8080/health`                                  |
+| Проверить headers    | `curl -v http://localhost:8080/health`                                  |
 
 ---
 
