@@ -4,8 +4,13 @@ storage/
 cmake-build-*/
 .cache/
 
-storage/input/*
-storage/output/*
+storage/**
+!storage/
+!storage/.gitkeep
+!storage/input/
+!storage/input/.gitkeep
+!storage/output/
+!storage/output/.gitkeep
 
 *.o
 *.a
