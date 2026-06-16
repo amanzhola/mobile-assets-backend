@@ -2,7 +2,7 @@
 
 | Branch                | Parent | Назначение                        | Главная идея                                                                        | Что добавлено                                                            | API                                                                   | Данные                 | Назад                               |
 | --------------------- | ------ | --------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------- | ---------------------- | ----------------------------------- |
-| `feature/catalog-api` | `main` | Добавить metadata API для Android | Android получает tools/templates с backend, а не хранит их жёстко внутри приложения | `CatalogService`, `tools.json`, `templates.json`, `/tools`, `/templates` | `GET /tools`, `GET /templates`, старые generation endpoints сохранены | 11 tools, 24 templates | [Back to main README](../README.md) |
+| `feature/catalog-api` | `main` | Добавить metadata API для Android | Android получает tools/templates с backend, а не хранит их жёстко внутри приложения | `CatalogService`, `tools.json`, `templates.json`, `/tools`, `/templates` | `GET /tools`, `GET /templates`, старые generation endpoints сохранены | 11 tools, 24 templates | [Back to main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
 
 ---
 
@@ -202,6 +202,6 @@ git push -u origin feature/catalog-api
 
 | Repository               | Branch | README                                    |
 | ------------------------ | ------ | ----------------------------------------- |
-| 🚀 Mobile Assets Backend | `main` |[⬅️ Back to Main](https://github.com/amazhola/mobile-assets-backend/tree/main)|
+| 🚀 Mobile Assets Backend | `main` |[⬅️ Back to Main](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md)|
 
 ---
