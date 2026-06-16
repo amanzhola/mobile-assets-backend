@@ -1,8 +1,8 @@
 # ✨ feature/real-ai-enhancer-upscale
 
-| Branch | Parent | Назначение | Главная идея | Модель | Почему x2plus | Что меняется | Что НЕ меняется | Назад |
-|---|---|---|---|---|---|---|---|
-| `feature/real-ai-enhancer-upscale` | `feature/prompt-multi-image-comfy` | Сделать настоящий AI Enhancer | Вместо copy workflow подключить RealESRGAN upscale через ComfyUI | `RealESRGAN_x2plus.pth` | Легче для CPU/RAM, чем 4x | Только `ai_enhancer.json` и async generation | Android не меняется | [Back to main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
+| Branch | Parent | Model | Workflow | Async | Android | Result | Next | Back |
+|----------|----------|----------|----------|----------|----------|----------|----------|----------|
+| `feature/real-ai-enhancer-upscale` | `feature/prompt-multi-image-comfy` | `RealESRGAN_x2plus.pth` | Real ComfyUI AI Enhance | ✅ | No changes | `/outputs/...png` | `upscale_image.json` | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
 
 ---
 
