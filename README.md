@@ -202,6 +202,6 @@ git push -u origin feature/catalog-api
 
 | Repository               | Branch | README                                    |
 | ------------------------ | ------ | ----------------------------------------- |
-| 🚀 Mobile Assets Backend | `main` | [⬅️ Back to Main README](../../README.md) |
+| 🚀 Mobile Assets Backend | `main` |[⬅️ Back to Main](https://github.com/amazhola/mobile-assets-backend/tree/main)|
 
 ---
