@@ -26,6 +26,13 @@ public:
         const std::string& output_prefix,
         const std::string& enhance_mode
     ) const;
+    
+    json::object BuildToolWorkflow(
+	    const std::string& input_image_file_name,
+	    const std::string& output_prefix,
+	    const std::string& positive_prompt,
+	    double denoise
+	) const;
 
 private:
     json::object LoadWorkflowTemplate(const std::string& file_name) const;

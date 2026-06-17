@@ -182,4 +182,37 @@ json::object WorkflowBuilder::BuildAiEnhancerWorkflow(
     );
 }
 
+json::object WorkflowBuilder::BuildToolWorkflow(
+    const std::string& input_image_file_name,
+    const std::string& output_prefix,
+    const std::string& positive_prompt,
+    double denoise
+) const {
+    json::object workflow = LoadWorkflowTemplate("tool_img2img.json");
+
+    const std::string negative_prompt =
+        "low quality, blurry, distorted face, different person, bad anatomy, artifacts, watermark, text, ugly, deformed";
+
+    const int64_t seed =
+        static_cast<int64_t>(
+            std::chrono::steady_clock::now()
+                .time_since_epoch()
+                .count() % 2147483647
+        );
+
+    json::value workflow_value = workflow;
+
+    ReplacePlaceholders(
+        workflow_value,
+        input_image_file_name,
+        output_prefix,
+        positive_prompt,
+        negative_prompt,
+        denoise,
+        seed
+    );
+
+    return workflow_value.as_object();
+}
+
 }  // namespace comfy

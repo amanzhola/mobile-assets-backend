@@ -97,6 +97,7 @@ private:
     );
 
     std::optional<std::string> RunSingleImageViaComfy(
+    	const json::object& request,
         const std::string& input_file_name,
         const std::string& task_id,
         const std::string& server_action,
