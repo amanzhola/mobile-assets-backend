@@ -97,17 +97,21 @@ std::string BuildToolPositivePrompt(
             ? "Remove unwanted objects from the image naturally, fill background realistically."
             : "Remove from image: " + prompt + ", fill the area naturally, realistic background.";
     }
-
-    if (server_action == "remove_background") {
-        const std::string background_mode =
-            ReadOptionString(request, "backgroundMode");
-
-        if (background_mode == "transparent") {
-            return "Remove background, isolate the main subject cleanly, transparent background.";
-        }
-
-        return "Remove background, isolate the main subject cleanly, pure white studio background.";
-    }
+	
+	if (server_action == "remove_background") {
+	    const std::string background_type =
+	        ReadOptionString(request, "backgroundType");
+	
+	    if (background_type == "transparent") {
+	        return "Remove background, isolate the main subject cleanly, transparent background.";
+	    }
+	
+	    if (background_type == "white") {
+	        return "Remove background, isolate the main subject cleanly, pure white studio background.";
+	    }
+	
+	    return "Remove background, isolate the main subject cleanly.";
+	}
 
     if (server_action == "skin_improve") {
         return prompt.empty()
@@ -150,22 +154,37 @@ std::string BuildToolPositivePrompt(
     }
 
     if (server_action == "smile_edit") {
-        const std::string intensity =
-            ReadOptionString(request, "intensity");
-
-        std::string result =
-            "Natural smile edit, preserve same person, realistic teeth, natural expression";
-
-        if (!intensity.empty()) {
-            result += ", smile intensity level: " + intensity;
-        }
-
-        if (!prompt.empty()) {
-            result += ", " + prompt;
-        }
-
-        return result;
-    }
+	    const std::string smile_level =
+	        ReadOptionString(request, "smileLevel");
+	
+	    std::string smile_strength = "medium natural smile";
+	
+	    if (smile_level == "0") {
+	        smile_strength = "very subtle smile";
+	    } else if (smile_level == "1") {
+	        smile_strength = "small natural smile";
+	    } else if (smile_level == "2") {
+	        smile_strength = "medium natural smile";
+	    } else if (smile_level == "3") {
+	        smile_strength = "big natural smile";
+	    } else if (smile_level == "4") {
+	        smile_strength = "wide natural smile, visible teeth";
+	    }
+	
+	    std::string result =
+	        "Edit only the mouth into a natural smile, "
+	        "slightly lift mouth corners, "
+	        "preserve same person, preserve face identity, "
+	        "preserve clothing and background, realistic expression, " +
+	        smile_strength;
+	
+	    if (!prompt.empty()) {
+	        result += ", " + prompt;
+	    }
+	
+	    return result;
+	}
+    
 
     if (server_action == "change_scene") {
         return prompt.empty()
@@ -187,8 +206,8 @@ double ResolveToolDenoise(const std::string& server_action) {
     if (server_action == "skin_improve") return 0.18;
     if (server_action == "upscale_image") return 0.15;
     if (server_action == "change_scene") return 0.55;
-    if (server_action == "hair_studio") return 0.30;
-    if (server_action == "smile_edit") return 0.22;
+    if (server_action == "hair_studio") return 0.45;
+    if (server_action == "smile_edit") return 0.30;
 
     return 0.25;
 }
