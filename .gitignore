@@ -1,9 +1,8 @@
 build/
-storage/
-*.tmp
 cmake-build-*/
 .cache/
 
+# Runtime storage
 storage/**
 !storage/
 !storage/.gitkeep
@@ -11,11 +10,25 @@ storage/**
 !storage/input/.gitkeep
 !storage/output/
 !storage/output/.gitkeep
+!storage/template_cache/
+!storage/template_cache/.gitkeep
 
+# Local Python tools
+.venv-tools/
+__pycache__/
+*.pyc
+
+# Temporary / logs
+*.tmp
 *.o
 *.a
 *.so
 *.log
+
+# Heavy AI models
+*.pth
+*.safetensors
+*.ckpt
 
 .DS_Store
 .vscode/

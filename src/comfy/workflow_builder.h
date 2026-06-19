@@ -26,13 +26,21 @@ public:
         const std::string& output_prefix,
         const std::string& enhance_mode
     ) const;
-    
+
     json::object BuildToolWorkflow(
-	    const std::string& input_image_file_name,
-	    const std::string& output_prefix,
-	    const std::string& positive_prompt,
-	    double denoise
-	) const;
+        const std::string& input_image_file_name,
+        const std::string& output_prefix,
+        const std::string& positive_prompt,
+        double denoise
+    ) const;
+
+    json::object BuildTemplateWorkflow(
+        const std::string& user_image_file_name,
+        const std::string& template_image_file_name,
+        const std::string& output_prefix,
+        const std::string& positive_prompt,
+        double denoise
+    ) const;
 
 private:
     json::object LoadWorkflowTemplate(const std::string& file_name) const;
@@ -40,6 +48,7 @@ private:
     static void ReplacePlaceholders(
         json::value& value,
         const std::string& input_image_file_name,
+        const std::string& template_image_file_name,
         const std::string& output_prefix,
         const std::string& positive_prompt,
         const std::string& negative_prompt,

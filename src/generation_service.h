@@ -3,6 +3,8 @@
 #include "comfy/comfy_client.h"
 #include "comfy/workflow_builder.h"
 #include "output_service.h"
+#include "template_asset_service.h"
+#include "generation/generation_task_store.h"
 
 #include <boost/json.hpp>
 
@@ -11,7 +13,6 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -19,18 +20,6 @@ namespace generation {
 
 namespace json = boost::json;
 namespace fs = std::filesystem;
-
-struct GenerationTask {
-    std::string task_id;
-    std::string server_action;
-    std::string tool_type;
-    std::string prompt;
-    std::string template_id;
-    int output_count = 1;
-    std::string status = "processing";
-    int progress_percent = 0;
-    std::vector<std::string> result_image_urls;
-};
 
 class GenerationService {
 public:
@@ -40,6 +29,7 @@ public:
         comfy::ComfyClient& comfy_client,
         comfy::WorkflowBuilder& workflow_builder,
         output::OutputService& output_service,
+        templates::TemplateAssetService& template_asset_service,
         fs::path backend_input_dir,
         fs::path comfy_input_dir,
         fs::path comfy_output_dir
@@ -51,19 +41,27 @@ public:
     json::object Regenerate(const std::string& task_id);
 
 private:
-    void LoadTasks();
-    void SaveTasks() const;
-
     std::string MakeTaskId();
     bool IsKnownAction(const std::string& action) const;
     std::string ChooseWorkflow(const std::string& action) const;
+
     std::string MakeMockResultUrl(
         const std::string& action,
         const std::string& task_id,
         int index
     ) const;
 
-    std::string FindTemplatePrompt(const std::string& template_id) const;
+    std::string FindTemplatePrompt(
+        const std::string& template_id
+    ) const;
+
+    std::string BuildTemplatePositivePrompt(
+        const std::string& template_id
+    ) const;
+
+    double ResolveTemplateDenoise(
+        const std::string& template_id
+    ) const;
 
     void StartComfyGenerationInBackground(
         json::object request,
@@ -83,11 +81,11 @@ private:
         const std::string& fallback_image_url,
         int output_count
     );
-    
+
     void UpdateTaskProgress(
-	    const std::string& task_id,
-	    int progress_percent
-	);
+        const std::string& task_id,
+        int progress_percent
+    );
 
     std::vector<std::string> RunGenerationViaComfy(
         const json::object& request,
@@ -97,7 +95,7 @@ private:
     );
 
     std::optional<std::string> RunSingleImageViaComfy(
-    	const json::object& request,
+        const json::object& request,
         const std::string& input_file_name,
         const std::string& task_id,
         const std::string& server_action,
@@ -113,21 +111,21 @@ private:
         const json::object& request
     ) const;
 
-    json::object TaskToJson(const GenerationTask& task) const;
-    GenerationTask TaskFromJson(const json::object& obj) const;
-
 private:
-    fs::path storage_file_;
-    std::atomic_uint64_t next_task_id_{1};
-    std::unordered_map<std::string, GenerationTask> tasks_;
-    std::mutex comfy_generation_mutex_;
-    mutable std::mutex tasks_mutex_;
+    GenerationTaskStore task_store_;
+
+	std::atomic_uint64_t next_task_id_{1};
+	std::unordered_map<std::string, GenerationTask> tasks_;
+	mutable std::mutex tasks_mutex_;
+	
+	std::mutex comfy_generation_mutex_;
 
     fs::path templates_file_;
 
     comfy::ComfyClient& comfy_client_;
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
+    templates::TemplateAssetService& template_asset_service_;
 
     fs::path backend_input_dir_;
     fs::path comfy_input_dir_;

@@ -28,6 +28,11 @@ add_executable(mobile_assets_backend
     src/comfy/workflow_builder.cpp
     src/output_service.h
     src/output_service.cpp
+    src/template_asset_service.cpp
+    src/generation/generation_json.cpp
+    src/generation/generation_tool_prompts.cpp
+    src/generation/generation_task_store.cpp
+    src/generation/generation_template_workflow.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE

@@ -1,5 +1,9 @@
 #include "generation_service.h"
 
+#include "generation/generation_json.h"
+#include "generation/generation_tool_prompts.h"
+#include "generation/generation_template_workflow.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -12,322 +16,10 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
-#include <string_view>
 
 namespace generation {
 
 namespace fs = std::filesystem;
-
-namespace {
-
-boost::json::string_view ToJsonKey(std::string_view key) {
-    return boost::json::string_view(key.data(), key.size());
-}
-
-std::string ReadOptionString(
-    const json::object& obj,
-    std::string_view key
-) {
-    auto options_it = obj.find("options");
-
-    if (options_it == obj.end() || !options_it->value().is_object()) {
-        return {};
-    }
-
-    const auto& options = options_it->value().as_object();
-    auto value_it = options.find(ToJsonKey(key));
-
-    if (value_it == options.end() || !value_it->value().is_string()) {
-        return {};
-    }
-
-    return std::string(value_it->value().as_string());
-}
-
-bool IsToolAction(const std::string& action) {
-    return action == "ghibli" ||
-           action == "ghostface" ||
-           action == "glam_makeup" ||
-           action == "remove_objects" ||
-           action == "remove_background" ||
-           action == "skin_improve" ||
-           action == "upscale_image" ||
-           action == "change_scene" ||
-           action == "hair_studio" ||
-           action == "smile_edit";
-}
-
-std::string BuildToolPositivePrompt(
-    const json::object& request,
-    const std::string& server_action,
-    const std::string& prompt
-) {
-    if (server_action == "ghibli") {
-        return prompt.empty()
-            ? "Transform the image into a Studio Ghibli-inspired look: Soft, dreamy hand-drawn textures with warm, pastel colors and delicate outlines."
-            : prompt;
-    }
-
-    if (server_action == "ghostface") {
-        return prompt.empty()
-            ? "Transform your photo into a spooky Ghost Face-inspired scene."
-            : prompt;
-    }
-
-    if (server_action == "glam_makeup") {
-        const std::string makeup_style =
-            ReadOptionString(request, "makeupStyle");
-
-        std::string result =
-            "Professional makeup, beauty portrait, realistic photo, natural skin texture, preserve same face";
-
-        if (!makeup_style.empty()) {
-            result += ", makeup style: " + makeup_style;
-        }
-
-        if (!prompt.empty()) {
-            result += ", optional details: " + prompt;
-        }
-
-        return result;
-    }
-
-    if (server_action == "remove_objects") {
-        return prompt.empty()
-            ? "Remove unwanted objects from the image naturally, fill background realistically."
-            : "Remove from image: " + prompt + ", fill the area naturally, realistic background.";
-    }
-	
-	if (server_action == "remove_background") {
-	    const std::string background_type =
-	        ReadOptionString(request, "backgroundType");
-	
-	    if (background_type == "transparent") {
-	        return "Remove background, isolate the main subject cleanly, transparent background.";
-	    }
-	
-	    if (background_type == "white") {
-	        return "Remove background, isolate the main subject cleanly, pure white studio background.";
-	    }
-	
-	    return "Remove background, isolate the main subject cleanly.";
-	}
-
-    if (server_action == "skin_improve") {
-        return prompt.empty()
-            ? "Smooth skin, reduce blemishes, and keep natural texture."
-            : prompt;
-    }
-
-    if (server_action == "upscale_image") {
-        return prompt.empty()
-            ? "Restore sharpness, clarity, and fine details while keeping the result natural."
-            : prompt;
-    }
-
-    if (server_action == "hair_studio") {
-        const std::string hairstyle =
-            ReadOptionString(request, "hairstyle");
-
-        const std::string length =
-            ReadOptionString(request, "length");
-
-        const std::string color =
-            ReadOptionString(request, "color");
-
-        std::string result =
-            "Realistic hair transformation, preserve same person, same face, natural hair details";
-
-        if (!hairstyle.empty()) {
-            result += ", hairstyle: " + hairstyle;
-        }
-
-        if (!length.empty()) {
-            result += ", hair length: " + length;
-        }
-
-        if (!color.empty()) {
-            result += ", hair color: " + color;
-        }
-
-        return result;
-    }
-
-    if (server_action == "smile_edit") {
-	    const std::string smile_level =
-	        ReadOptionString(request, "smileLevel");
-	
-	    std::string smile_strength = "medium natural smile";
-	
-	    if (smile_level == "0") {
-	        smile_strength = "very subtle smile";
-	    } else if (smile_level == "1") {
-	        smile_strength = "small natural smile";
-	    } else if (smile_level == "2") {
-	        smile_strength = "medium natural smile";
-	    } else if (smile_level == "3") {
-	        smile_strength = "big natural smile";
-	    } else if (smile_level == "4") {
-	        smile_strength = "wide natural smile, visible teeth";
-	    }
-	
-	    std::string result =
-	        "Edit only the mouth into a natural smile, "
-	        "slightly lift mouth corners, "
-	        "preserve same person, preserve face identity, "
-	        "preserve clothing and background, realistic expression, " +
-	        smile_strength;
-	
-	    if (!prompt.empty()) {
-	        result += ", " + prompt;
-	    }
-	
-	    return result;
-	}
-    
-
-    if (server_action == "change_scene") {
-        return prompt.empty()
-            ? "Change background to a cinematic realistic scene, preserve same person and composition."
-            : "Change background to: " + prompt + ", preserve same person, realistic lighting, natural composition.";
-    }
-
-    return prompt.empty()
-        ? "Edit photo naturally, realistic result, preserve main subject."
-        : prompt;
-}
-
-double ResolveToolDenoise(const std::string& server_action) {
-    if (server_action == "ghibli") return 0.55;
-    if (server_action == "ghostface") return 0.50;
-    if (server_action == "glam_makeup") return 0.28;
-    if (server_action == "remove_objects") return 0.45;
-    if (server_action == "remove_background") return 0.20;
-    if (server_action == "skin_improve") return 0.18;
-    if (server_action == "upscale_image") return 0.15;
-    if (server_action == "change_scene") return 0.55;
-    if (server_action == "hair_studio") return 0.45;
-    if (server_action == "smile_edit") return 0.30;
-
-    return 0.25;
-}
-
-std::string ReadStringOrEmpty(const json::object& obj, std::string_view key) {
-    auto it = obj.find(ToJsonKey(key));
-
-    if (it == obj.end() || !it->value().is_string()) {
-        return {};
-    }
-
-    return std::string(it->value().as_string());
-}
-
-std::string ReadTemplateId(const json::object& obj) {
-    if (auto it = obj.find("templateId"); it != obj.end() && it->value().is_string()) {
-        return std::string(it->value().as_string());
-    }
-
-    if (auto options_it = obj.find("options"); options_it != obj.end() && options_it->value().is_object()) {
-        const auto& options = options_it->value().as_object();
-
-        if (auto template_it = options.find("templateId"); template_it != options.end() && template_it->value().is_string()) {
-            return std::string(template_it->value().as_string());
-        }
-    }
-
-    return {};
-}
-
-int ReadIntOrDefault(const json::object& obj, std::string_view key, int default_value) {
-    auto it = obj.find(ToJsonKey(key));
-
-    if (it == obj.end()) {
-        return default_value;
-    }
-
-    if (it->value().is_int64()) {
-        return static_cast<int>(it->value().as_int64());
-    }
-
-    if (it->value().is_uint64()) {
-        return static_cast<int>(it->value().as_uint64());
-    }
-
-    return default_value;
-}
-
-std::vector<std::string> ReadStringArray(const json::object& obj, std::string_view key) {
-    std::vector<std::string> result;
-
-    auto it = obj.find(ToJsonKey(key));
-
-    if (it == obj.end() || !it->value().is_array()) {
-        return result;
-    }
-
-    for (const auto& value : it->value().as_array()) {
-        if (value.is_string()) {
-            result.push_back(std::string(value.as_string()));
-        }
-    }
-
-    return result;
-}
-
-std::string ReadFirstInputImageUrl(const json::object& request) {
-    std::string source_image_url = ReadStringOrEmpty(request, "sourceImageUrl");
-
-    if (!source_image_url.empty()) {
-        return source_image_url;
-    }
-
-    auto uploaded_urls = ReadStringArray(request, "uploadedImageUrls");
-
-    if (!uploaded_urls.empty()) {
-        return uploaded_urls.front();
-    }
-
-    return {};
-}
-
-json::object MakeError(std::string code, std::string message) {
-    json::object obj;
-    obj["error"] = true;
-    obj["code"] = std::move(code);
-    obj["message"] = std::move(message);
-    return obj;
-}
-
-std::optional<std::string> ExtractFileNameFromUploadUrl(const std::string& raw_url) {
-    std::string url = raw_url;
-
-    const auto query_pos = url.find('?');
-
-    if (query_pos != std::string::npos) {
-        url = url.substr(0, query_pos);
-    }
-
-    const std::string marker = "/uploads/";
-    const auto marker_pos = url.find(marker);
-
-    if (marker_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    std::string file_name = url.substr(marker_pos + marker.size());
-
-    if (file_name.empty()) {
-        return std::nullopt;
-    }
-
-    if (file_name.find('/') != std::string::npos || file_name.find('\\') != std::string::npos) {
-        return std::nullopt;
-    }
-
-    return file_name;
-}
-
-}  // namespace
 
 GenerationService::GenerationService(
     fs::path storage_file,
@@ -335,156 +27,21 @@ GenerationService::GenerationService(
     comfy::ComfyClient& comfy_client,
     comfy::WorkflowBuilder& workflow_builder,
     output::OutputService& output_service,
+    templates::TemplateAssetService& template_asset_service,
     fs::path backend_input_dir,
     fs::path comfy_input_dir,
     fs::path comfy_output_dir
 )
-    : storage_file_{std::move(storage_file)}
+    : task_store_{std::move(storage_file)}
     , templates_file_{std::move(templates_file)}
     , comfy_client_{comfy_client}
     , workflow_builder_{workflow_builder}
     , output_service_{output_service}
+    , template_asset_service_{template_asset_service}
     , backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
     , comfy_output_dir_{std::move(comfy_output_dir)} {
-    LoadTasks();
-}
-
-void GenerationService::LoadTasks() {
-    tasks_.clear();
-
-    if (!fs::exists(storage_file_)) {
-        return;
-    }
-
-    std::ifstream input(storage_file_);
-
-    if (!input.is_open()) {
-        return;
-    }
-
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-
-    if (buffer.str().empty()) {
-        return;
-    }
-
-    json::value parsed;
-
-    try {
-        parsed = json::parse(buffer.str());
-    } catch (...) {
-        return;
-    }
-
-    if (!parsed.is_object()) {
-        return;
-    }
-
-    const json::object& root = parsed.as_object();
-
-    if (auto it = root.find("nextTaskId"); it != root.end() && it->value().is_uint64()) {
-        next_task_id_ = static_cast<std::uint64_t>(it->value().as_uint64());
-    }
-
-    auto tasks_it = root.find("tasks");
-
-    if (tasks_it == root.end() || !tasks_it->value().is_array()) {
-        return;
-    }
-
-    for (const auto& task_value : tasks_it->value().as_array()) {
-        if (!task_value.is_object()) {
-            continue;
-        }
-
-        GenerationTask task = TaskFromJson(task_value.as_object());
-
-        if (!task.task_id.empty()) {
-            tasks_.emplace(task.task_id, std::move(task));
-        }
-    }
-}
-
-void GenerationService::SaveTasks() const {
-    fs::create_directories(storage_file_.parent_path());
-
-    json::array tasks_json;
-
-    for (const auto& [task_id, task] : tasks_) {
-        tasks_json.emplace_back(TaskToJson(task));
-    }
-
-    json::object root;
-    root["nextTaskId"] = next_task_id_.load();
-    root["tasks"] = std::move(tasks_json);
-
-    const auto temp_file = storage_file_.string() + ".tmp";
-
-    {
-        std::ofstream output(temp_file, std::ios::binary);
-
-        if (!output.is_open()) {
-            throw std::runtime_error("Failed to open task storage file");
-        }
-
-        output << json::serialize(root);
-    }
-
-    fs::rename(temp_file, storage_file_);
-}
-
-GenerationTask GenerationService::TaskFromJson(const json::object& obj) const {
-    GenerationTask task;
-
-    task.task_id = ReadStringOrEmpty(obj, "taskId");
-    task.status = ReadStringOrEmpty(obj, "status");
-    task.server_action = ReadStringOrEmpty(obj, "serverAction");
-    task.tool_type = ReadStringOrEmpty(obj, "toolType");
-    task.prompt = ReadStringOrEmpty(obj, "prompt");
-    task.template_id = ReadStringOrEmpty(obj, "templateId");
-    task.output_count = ReadIntOrDefault(obj, "outputCount", 1);
-    task.progress_percent = ReadIntOrDefault(obj, "progressPercent", 0);
-
-    if (task.status.empty()) {
-        task.status = "completed";
-    }
-
-    auto urls_it = obj.find("resultImageUrls");
-
-    if (urls_it != obj.end() && urls_it->value().is_array()) {
-        for (const auto& url_value : urls_it->value().as_array()) {
-            if (url_value.is_string()) {
-                task.result_image_urls.push_back(std::string(url_value.as_string()));
-            }
-        }
-    }
-
-    return task;
-}
-
-json::object GenerationService::TaskToJson(const GenerationTask& task) const {
-    json::array urls;
-
-    for (const auto& url : task.result_image_urls) {
-        urls.emplace_back(url);
-    }
-
-    json::object obj;
-    obj["taskId"] = task.task_id;
-    obj["status"] = task.status;
-    obj["progressPercent"] = task.progress_percent;
-    obj["serverAction"] = task.server_action;
-    obj["toolType"] = task.tool_type;
-    obj["prompt"] = task.prompt;
-    obj["templateId"] = task.template_id.empty()
-        ? json::value(nullptr)
-        : json::value(task.template_id);
-    obj["outputCount"] = task.output_count;
-    obj["resultImageUrls"] = std::move(urls);
-
-    return obj;
+    task_store_.Load(tasks_, next_task_id_);
 }
 
 std::string GenerationService::MakeTaskId() {
@@ -521,7 +78,7 @@ std::string GenerationService::ChooseWorkflow(const std::string& action) const {
     }
 
     if (action == "template") {
-        return "workflows/template.json";
+        return "workflows/template_img2img.json";
     }
 
     if (action == "ai_enhancer") {
@@ -585,6 +142,20 @@ std::string GenerationService::FindTemplatePrompt(const std::string& template_id
     }
 
     return {};
+}
+
+std::string GenerationService::BuildTemplatePositivePrompt(
+    const std::string& template_id
+) const {
+    return FindTemplatePrompt(template_id);
+}
+
+double GenerationService::ResolveTemplateDenoise(
+    const std::string& template_id
+) const {
+    (void)template_id;
+
+    return 0.32;
 }
 
 std::vector<std::string> GenerationService::ExtractUploadedFileNames(
@@ -679,7 +250,7 @@ std::optional<std::string> GenerationService::FindNewestComfyOutputByPrefix(
 }
 
 std::optional<std::string> GenerationService::RunSingleImageViaComfy(
-	const json::object& request,
+    const json::object& request,
     const std::string& input_file_name,
     const std::string& task_id,
     const std::string& server_action,
@@ -687,6 +258,14 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
     const std::string& enhance_mode
 ) {
     try {
+        std::cout
+            << "[RUN_SINGLE_IMAGE_START]\n"
+            << "taskId=" << task_id << "\n"
+            << "serverAction=" << server_action << "\n"
+            << "inputFileName=" << input_file_name << "\n"
+            << "imageIndex=" << image_index << "\n"
+            << std::endl;
+
         fs::create_directories(comfy_input_dir_);
 
         const fs::path backend_input_file =
@@ -695,7 +274,18 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
         const fs::path comfy_input_file =
             comfy_input_dir_ / input_file_name;
 
+        std::cout
+            << "[INPUT_PATHS]\n"
+            << "backendInputFile=" << backend_input_file.string() << "\n"
+            << "comfyInputFile=" << comfy_input_file.string() << "\n"
+            << std::endl;
+
         if (!fs::exists(backend_input_file)) {
+            std::cout
+                << "[INPUT_FILE_MISSING]\n"
+                << "file=" << backend_input_file.string() << "\n"
+                << std::endl;
+
             return std::nullopt;
         }
 
@@ -707,12 +297,22 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             fs::copy_options::overwrite_existing
         );
 
+        std::cout
+            << "[USER_IMAGE_COPIED_TO_COMFY]\n"
+            << "file=" << comfy_input_file.string() << "\n"
+            << std::endl;
+
         const bool uploaded = comfy_client_.UploadImage(
             backend_input_file,
             input_file_name
         );
 
         if (!uploaded) {
+            std::cout
+                << "[COMFY_UPLOAD_FAILED]\n"
+                << "file=" << backend_input_file.string() << "\n"
+                << std::endl;
+
             return std::nullopt;
         }
 
@@ -722,43 +322,113 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             "pixo_" + server_action + "_" + task_id + "_" +
             std::to_string(image_index);
 
+        std::cout
+            << "[OUTPUT_PREFIX]\n"
+            << "outputPrefix=" << output_prefix << "\n"
+            << std::endl;
+
         json::object workflow;
 
-		if (server_action == "ai_enhancer") {
-		    workflow = workflow_builder_.BuildAiEnhancerWorkflow(
-		        input_file_name,
-		        output_prefix,
-		        enhance_mode
-		    );
-		} else if (IsToolAction(server_action)) {
-		    const std::string positive_prompt = BuildToolPositivePrompt(
-		        request,
-		        server_action,
-		        ReadStringOrEmpty(request, "prompt")
-		    );
+        if (server_action == "ai_enhancer") {
+            std::cout
+                << "[BUILD_WORKFLOW]\n"
+                << "type=ai_enhancer\n"
+                << std::endl;
+
+            workflow = workflow_builder_.BuildAiEnhancerWorkflow(
+                input_file_name,
+                output_prefix,
+                enhance_mode
+            );
+
+        } else if (server_action == "template") {
+		    const std::string template_id =
+		        ReadTemplateId(request);
 		
-		    const double denoise = ResolveToolDenoise(server_action);
+		    const std::string positive_prompt =
+		        BuildTemplatePositivePrompt(template_id);
 		
-		    workflow = workflow_builder_.BuildToolWorkflow(
-		        input_file_name,
-		        output_prefix,
-		        positive_prompt,
-		        denoise
-		    );
-		} else {
-		    workflow = workflow_builder_.BuildWorkflow(
-		        server_action,
-		        input_file_name,
-		        output_prefix,
-		        enhance_mode
-		    );
-		}
+		    const double denoise =
+		        ResolveTemplateDenoise(template_id);
+		
+		    auto template_workflow =
+		        BuildTemplateWorkflowForGeneration(
+		            template_id,
+		            task_id,
+		            image_index,
+		            output_prefix,
+		            positive_prompt,
+		            denoise,
+		            backend_input_file,
+		            backend_input_dir_,
+		            comfy_input_dir_,
+		            comfy_client_,
+		            workflow_builder_,
+		            template_asset_service_
+		        );
+		
+		    if (!template_workflow) {
+		        return std::nullopt;
+		    }
+		
+		    workflow = std::move(template_workflow->workflow);
+
+        } else if (IsToolAction(server_action)) {
+            std::cout
+                << "[BUILD_WORKFLOW]\n"
+                << "type=tool\n"
+                << std::endl;
+
+            const std::string positive_prompt = BuildToolPositivePrompt(
+                request,
+                server_action,
+                ReadStringOrEmpty(request, "prompt")
+            );
+
+            const double denoise = ResolveToolDenoise(server_action);
+
+            workflow = workflow_builder_.BuildToolWorkflow(
+                input_file_name,
+                output_prefix,
+                positive_prompt,
+                denoise
+            );
+
+        } else {
+            std::cout
+                << "[BUILD_WORKFLOW]\n"
+                << "type=default\n"
+                << std::endl;
+
+            workflow = workflow_builder_.BuildWorkflow(
+                server_action,
+                input_file_name,
+                output_prefix,
+                enhance_mode
+            );
+        }
+
+        std::cout
+            << "[COMFY_WORKFLOW_JSON]\n"
+            << json::serialize(workflow)
+            << "\n"
+            << std::endl;
 
         auto prompt_id = comfy_client_.QueuePrompt(workflow);
 
         if (!prompt_id) {
+            std::cout
+                << "[COMFY_QUEUE_FAILED]\n"
+                << "taskId=" << task_id << "\n"
+                << std::endl;
+
             return std::nullopt;
         }
+
+        std::cout
+            << "[COMFY_PROMPT_QUEUED]\n"
+            << "promptId=" << *prompt_id << "\n"
+            << std::endl;
 
         UpdateTaskProgress(task_id, 30);
         UpdateTaskProgress(task_id, 40);
@@ -768,134 +438,124 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             240,
             1000
         );
-        
+
+        std::cout
+            << "[COMFY_WAIT_RESULT]\n"
+            << "hasOutput=" << static_cast<bool>(comfy_output_file_name) << "\n";
+
+        if (comfy_output_file_name) {
+            std::cout
+                << "outputFile=" << *comfy_output_file_name << "\n";
+        }
+
+        std::cout << std::endl;
+
         if (
-		    comfy_output_file_name &&
-		    !comfy_output_file_name->starts_with(output_prefix)
-		) {
-		    std::cout
-		        << "[COMFY_OUTPUT_PREFIX_MISMATCH]\n"
-		        << "taskId=" << task_id << "\n"
-		        << "expectedPrefix=" << output_prefix << "\n"
-		        << "actualFile=" << *comfy_output_file_name << "\n"
-		        << std::endl;
-		
-		    comfy_output_file_name = std::nullopt;
-		}
+            comfy_output_file_name &&
+            !comfy_output_file_name->starts_with(output_prefix)
+        ) {
+            std::cout
+                << "[COMFY_OUTPUT_PREFIX_MISMATCH]\n"
+                << "taskId=" << task_id << "\n"
+                << "expectedPrefix=" << output_prefix << "\n"
+                << "actualFile=" << *comfy_output_file_name << "\n"
+                << std::endl;
+
+            comfy_output_file_name = std::nullopt;
+        }
 
         if (!comfy_output_file_name) {
+            std::cout
+                << "[COMFY_OUTPUT_FALLBACK_SEARCH]\n"
+                << "outputPrefix=" << output_prefix << "\n"
+                << std::endl;
+
             comfy_output_file_name =
                 FindNewestComfyOutputByPrefix(output_prefix);
         }
 
         if (!comfy_output_file_name) {
+            std::cout
+                << "[COMFY_NO_OUTPUT]\n"
+                << "taskId=" << task_id << "\n"
+                << "outputPrefix=" << output_prefix << "\n"
+                << std::endl;
+
             return std::nullopt;
         }
 
         UpdateTaskProgress(task_id, 85);
 
         const fs::path local_comfy_output_file =
-		    comfy_output_dir_ / *comfy_output_file_name;
-		
-		fs::path source_output_file = local_comfy_output_file;
-		
-		if (!fs::exists(local_comfy_output_file)) {
-		    const bool downloaded = comfy_client_.DownloadOutputImage(
-		        *comfy_output_file_name,
-		        local_comfy_output_file
-		    );
-		
-		    if (!downloaded) {
-		        std::cout
-		            << "[COMFY_OUTPUT_SOURCE_ERROR]\n"
-		            << "taskId=" << task_id << "\n"
-		            << "file=" << local_comfy_output_file.string() << "\n"
-		            << "message=local output missing and remote download failed\n"
-		            << std::endl;
-		
-		        return std::nullopt;
-		    }
-		}
-		
-		UpdateTaskProgress(task_id, 92);
-		
-		const fs::path saved_output_file =
-		    output_service_.SaveFromComfyOutput(source_output_file);
-		
-		UpdateTaskProgress(task_id, 95);
-		
-		return output_service_.GetPublicUrl(
-		    saved_output_file.filename().string()
-		);
+            comfy_output_dir_ / *comfy_output_file_name;
+
+        fs::path source_output_file = local_comfy_output_file;
+
+        std::cout
+            << "[COMFY_OUTPUT_FILE]\n"
+            << "fileName=" << *comfy_output_file_name << "\n"
+            << "localPath=" << local_comfy_output_file.string() << "\n"
+            << "exists=" << fs::exists(local_comfy_output_file) << "\n"
+            << std::endl;
+
+        if (!fs::exists(local_comfy_output_file)) {
+            const bool downloaded = comfy_client_.DownloadOutputImage(
+                *comfy_output_file_name,
+                local_comfy_output_file
+            );
+
+            if (!downloaded) {
+                std::cout
+                    << "[COMFY_OUTPUT_SOURCE_ERROR]\n"
+                    << "taskId=" << task_id << "\n"
+                    << "file=" << local_comfy_output_file.string() << "\n"
+                    << "message=local output missing and remote download failed\n"
+                    << std::endl;
+
+                return std::nullopt;
+            }
+        }
+
+        UpdateTaskProgress(task_id, 92);
+
+        const fs::path saved_output_file =
+            output_service_.SaveFromComfyOutput(source_output_file);
+
+        UpdateTaskProgress(task_id, 95);
+
+        const std::string public_url =
+            output_service_.GetPublicUrl(
+                saved_output_file.filename().string()
+            );
+
+        std::cout
+            << "[GENERATION_SUCCESS]\n"
+            << "taskId=" << task_id << "\n"
+            << "publicUrl=" << public_url << "\n"
+            << std::endl;
+
+        return public_url;
+
+    } catch (const std::exception& e) {
+        std::cout
+            << "[RUN_SINGLE_IMAGE_EXCEPTION]\n"
+            << "taskId=" << task_id << "\n"
+            << "serverAction=" << server_action << "\n"
+            << "message=" << e.what() << "\n"
+            << std::endl;
+
+        return std::nullopt;
 
     } catch (...) {
+        std::cout
+            << "[RUN_SINGLE_IMAGE_UNKNOWN_EXCEPTION]\n"
+            << "taskId=" << task_id << "\n"
+            << "serverAction=" << server_action << "\n"
+            << std::endl;
+
         return std::nullopt;
     }
 }
-/*
-std::vector<std::string> GenerationService::RunGenerationViaComfy(
-    const json::object& request,
-    const std::string& task_id,
-    const std::string& server_action,
-    int output_count
-) {	
-	UpdateTaskProgress(task_id, 1);
-	std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
-	
-	UpdateTaskProgress(task_id, 10);
-    std::vector<std::string> result_urls;
-
-    const std::vector<std::string> input_file_names = ExtractUploadedFileNames(request);
-
-    if (input_file_names.empty()) {
-        return result_urls;
-    }
-    
-    const std::string enhance_mode = ReadOptionString(request, "enhanceMode");
-
-    if (server_action == "prompt") {
-        int image_index = 0;
-
-        for (const std::string& input_file_name : input_file_names) {
-            auto output_url = RunSingleImageViaComfy(
-                request,
-                input_file_name,
-                task_id,
-                server_action,
-                image_index,
-                enhance_mode
-            );
-
-            if (output_url) {
-                result_urls.push_back(*output_url);
-            }
-
-            ++image_index;
-        }
-
-        return result_urls;
-    }
-
-    auto output_url = RunSingleImageViaComfy(
-        request,
-        input_file_names.front(),
-        task_id,
-        server_action,
-        0,
-        enhance_mode
-    );
-
-    if (output_url) {
-        result_urls.push_back(*output_url);
-    }
-
-    while (!result_urls.empty() && static_cast<int>(result_urls.size()) < output_count) {
-        result_urls.push_back(result_urls.front());
-    }
-
-    return result_urls;
-}
-*/
 
 std::vector<std::string> GenerationService::RunGenerationViaComfy(
     const json::object& request,
@@ -904,8 +564,75 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
     int output_count
 ) {
     std::vector<std::string> result_urls;
+    
+    if (server_action == "remove_background") {
+	    const auto input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+		const std::string background_type =
+		    ReadOptionString(request, "backgroundType");
+	
+	    const std::string final_mode =
+    		background_type == "transparent" ? "transparent" : "white";
+	
+	    const fs::path input_file =
+	        backend_input_dir_ / input_file_names.front();
+	
+	    const std::string output_name =
+	        "pixo_remove_background_" + task_id + ".png";
+	
+	    const fs::path output_file =
+	        output_service_.GetFilePath(output_name);
+	
+	    const std::string command =
+	        "cd /home/ubuntu/mobile-assets-backend && "
+	        ".venv-tools/bin/python3 scripts/remove_background.py "
+	        "\"" + input_file.string() + "\" "
+	        "\"" + output_file.string() + "\" "
+	        + final_mode;
+	
+	    std::cout
+	        << "[REMOVE_BACKGROUND_START]\n"
+	        << "input=" << input_file.string() << "\n"
+	        << "output=" << output_file.string() << "\n"
+	        << "mode=" << final_mode << "\n"
+	        << std::endl;
+	
+	    const int result =
+	        std::system(command.c_str());
+	
+	    if (
+	        result == 0 &&
+	        fs::exists(output_file) &&
+	        fs::file_size(output_file) > 0
+	    ) {
+	        result_urls.push_back(
+	            output_service_.GetPublicUrl(output_name)
+	        );
+	    } else {
+	        std::cout
+	            << "[REMOVE_BACKGROUND_FAILED]\n"
+	            << "result=" << result << "\n"
+	            << std::endl;
+	    }
+	
+	    while (
+	        !result_urls.empty() &&
+	        static_cast<int>(result_urls.size()) < output_count
+	    ) {
+	        result_urls.push_back(result_urls.front());
+	    }
+	
+	    UpdateTaskProgress(task_id, 100);
+	
+	    return result_urls;
+	}
 
-    if (server_action == "template" || server_action == "prompt") {
+    if (server_action == "prompt") {
         const auto uploaded_image_urls =
             ReadStringArray(request, "uploadedImageUrls");
 
@@ -1028,7 +755,7 @@ void GenerationService::CompleteTaskWithResults(
         it->second.result_image_urls.push_back(it->second.result_image_urls.front());
     }
 
-    SaveTasks();
+    task_store_.Save(tasks_, next_task_id_);
 }
 
 void GenerationService::UpdateTaskProgress(
@@ -1057,7 +784,7 @@ void GenerationService::UpdateTaskProgress(
 
     it->second.progress_percent = progress_percent;
 
-    SaveTasks();
+    task_store_.Save(tasks_, next_task_id_);
 }
 
 void GenerationService::FailTaskWithFallback(
@@ -1087,7 +814,7 @@ void GenerationService::FailTaskWithFallback(
         << "message=ComfyUI returned no output\n"
         << std::endl;
 
-    SaveTasks();
+    task_store_.Save(tasks_, next_task_id_);
 }
 
 json::object GenerationService::CreateGeneration(const json::object& request) {
@@ -1181,7 +908,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
     {
         std::lock_guard<std::mutex> lock(tasks_mutex_);
         tasks_.emplace(task_id, task);
-        SaveTasks();
+        task_store_.Save(tasks_, next_task_id_);
     }
 
     std::cout
@@ -1206,7 +933,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
         first_input_image_url
     );
 
-    json::object response = TaskToJson(task);
+    json::object response = task_store_.TaskToJson(task);
     response["workflow"] = workflow;
 
     return response;
@@ -1221,7 +948,7 @@ json::object GenerationService::GetTask(const std::string& task_id) const {
         return MakeError("task_not_found", "Task not found");
     }
 
-    return TaskToJson(it->second);
+    return task_store_.TaskToJson(it->second);
 }
 
 json::object GenerationService::GetResult(const std::string& task_id) const {
@@ -1268,9 +995,9 @@ json::object GenerationService::Regenerate(const std::string& task_id) {
     }
 
     tasks_.emplace(new_task.task_id, new_task);
-    SaveTasks();
+    task_store_.Save(tasks_, next_task_id_);
 
-    return TaskToJson(new_task);
+    return task_store_.TaskToJson(new_task);
 }
 
 }  // namespace generation

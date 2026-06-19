@@ -1,172 +1,237 @@
-# 🎨 feature/tools-sdxl-actions
+# 🖼️ feature/templates-sdxl-actions
+
+| Branch                           | Parent                       | Stage               | Goal                                          | AI Enhancer | Tools        | Templates               | Remove Background   | Refactor                         | Android            | Back                                                                                  |
+| -------------------------------- | ---------------------------- | ------------------- | --------------------------------------------- | ----------- | ------------ | ----------------------- | ------------------- | -------------------------------- | ------------------ | ------------------------------------------------------------------------------------- |
+| `feature/templates-sdxl-actions` | `feature/tools-sdxl-actions` | real SDXL Templates | 24 Templates через real two-image composition | unchanged   | already SDXL | `template_img2img.json` | direct `rembg` path | partial `src/generation/*` split | No Android changes | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
 
 ---
 
-| Branch                       | Parent                             | Цель                                              | AI Enhancer                                        | Tools                      | Workflow                      | Main Backend Change                                                                  | Test Result                           | Android            | Back                                                                                  |
-| ---------------------------- | ---------------------------------- | ------------------------------------------------- | -------------------------------------------------- | -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------- | ------------------ | ------------------------------------------------------------------------------------- |
-| `feature/tools-sdxl-actions` | `feature/ai-enhancer-kaggle-comfy` | Перевести 10 Tools на общий SDXL img2img pipeline | Отдельный `workflows/ai_enhancer.json`, не трогать | 10 tool actions через SDXL | `workflows/tool_img2img.json` | `BuildToolWorkflow`, `IsToolAction`, `BuildToolPositivePrompt`, `ResolveToolDenoise` | all completed, `progressPercent: 100` | No Android changes | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
+## ✅ What was done
+
+| #  | Area                   | Before                                                | After                                                                          | Result                              |
+| -- | ---------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------- |
+| 1  | Template output        | returned original uploaded image / mock-copy behavior | returns generated `/outputs/...`                                               | Templates are no longer fake        |
+| 2  | Template inputs        | one image was used incorrectly                        | user image + template background image                                         | correct two-image generation        |
+| 3  | Template assets        | duplicated files risk                                 | existing Git-backed `TemplateAssetService` cache                               | no large duplicate template files   |
+| 4  | User subject           | raw user image                                        | `subject_<task_id>_<image_index>.png` transparent PNG                          | person/object can be composited     |
+| 5  | Template workflow      | weak/copy flow                                        | remove background → subject PNG → template background → composite → SDXL blend | real Template pipeline              |
+| 6  | Mask direction         | black rectangle / invisible person                    | corrected alpha-mask direction                                                 | subject is visible                  |
+| 7  | Remove Background      | SDXL img2img route                                    | direct `rembg` script                                                          | correct background removal behavior |
+| 8  | Android option naming  | backend checked wrong option path in places           | backend reads actual Android option value                                      | white + transparent modes work      |
+| 9  | Transparent mode       | could force white/black-looking output                | RGBA PNG with alpha                                                            | real transparency                   |
+| 10 | White mode             | not stable                                            | subject composited on pure white                                               | clean white background              |
+| 11 | Script                 | missing/stale                                         | `scripts/remove_background.py`                                                 | shared cutout helper                |
+| 12 | Template workflow file | absent                                                | `workflows/template_img2img.json`                                              | separate workflow for Templates     |
+| 13 | Refactor               | `generation_service.cpp` too large                    | partial split into `src/generation/*`                                          | responsibilities start separating   |
+| 14 | Include paths          | broken after split                                    | relative includes fixed                                                        | build works                         |
+| 15 | Existing flows         | risk of regression                                    | AI Enhancer, Remove Background, Template checked                               | stable current branch               |
 
 ---
 
-## ✅ Current state
+## 🧱 Main architecture
 
-| Area            | Status       | Details                                                                                                                                                   |
-| --------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI Enhancer     | ✅ unchanged  | uses dedicated `workflows/ai_enhancer.json` through `BuildAiEnhancerWorkflow()`                                                                           |
-| Tool workflow   | ✅ added      | common `workflows/tool_img2img.json`                                                                                                                      |
-| Supported tools | ✅ 10 tools   | `ghibli`, `ghostface`, `glam_makeup`, `remove_objects`, `remove_background`, `skin_improve`, `upscale_image`, `change_scene`, `hair_studio`, `smile_edit` |
-| Android params  | ✅ supported  | backend reads `prompt`, `makeupStyle`, `backgroundMode`, `hairstyle`, `length`, `color`, `intensity`                                                      |
-| Seed            | ✅ unique     | generated from `steady_clock`                                                                                                                             |
-| Denoise         | ✅ per tool   | each tool has own denoise value                                                                                                                           |
-| Output safety   | ✅ fixed      | prefix mismatch protection + fallback search by prefix                                                                                                    |
-| ComfyUI jobs    | ✅ serialized | `std::mutex comfy_generation_mutex_`                                                                                                                      |
-| Validation      | ✅ tested     | all 10 tools completed successfully                                                                                                                       |
+| Flow                          | Input                                | Processing                                             | Output            |
+| ----------------------------- | ------------------------------------ | ------------------------------------------------------ | ----------------- |
+| AI Enhancer                   | uploaded user image                  | dedicated `workflows/ai_enhancer.json`                 | `/outputs/...`    |
+| Tools                         | uploaded user image                  | shared `workflows/tool_img2img.json`                   | `/outputs/...`    |
+| Templates                     | uploaded user image + template asset | transparent subject + template background + SDXL blend | `/outputs/...`    |
+| Remove Background white       | uploaded user image                  | `rembg` + white background                             | `/outputs/...png` |
+| Remove Background transparent | uploaded user image                  | `rembg` + RGBA alpha                                   | `/outputs/...png` |
+| Prompt                        | 1–5 uploaded images                  | still mostly pass-through/simple return                | next stage        |
 
 ---
 
-## 🧱 Main files
+## 🔁 Template pipeline
 
-| File                             | Purpose                                                                       |
-| -------------------------------- | ----------------------------------------------------------------------------- |
-| `workflows/tool_img2img.json`    | shared SDXL img2img workflow for tool actions                                 |
-| `src/comfy/workflow_builder.h`   | declares `BuildToolWorkflow()`                                                |
-| `src/comfy/workflow_builder.cpp` | injects prompt, negative prompt, denoise, seed, input image, output prefix    |
-| `src/generation_service.h`       | declares tool routing helpers                                                 |
-| `src/generation_service.cpp`     | detects tool actions, builds prompts, resolves denoise, runs ComfyUI workflow |
-
----
-
-## 🧩 Workflow routing
-
-| Action type   | Workflow                      | Builder method              | Notes                         |
-| ------------- | ----------------------------- | --------------------------- | ----------------------------- |
-| AI Enhancer   | `workflows/ai_enhancer.json`  | `BuildAiEnhancerWorkflow()` | separate and unchanged        |
-| Tool actions  | `workflows/tool_img2img.json` | `BuildToolWorkflow()`       | shared SDXL img2img workflow  |
-| Other actions | `workflows/<action>.json`     | `BuildWorkflow()`           | fallback for non-tool actions |
+| Step | Source  | Action                                 | Target                   |
+| ---- | ------- | -------------------------------------- | ------------------------ |
+| 1    | Android | sends template generation request      | backend `/generations`   |
+| 2    | Backend | reads selected `templateId`            | template asset cache     |
+| 3    | Backend | loads user image from `storage/input`  | local source image       |
+| 4    | Backend | runs `scripts/remove_background.py`    | transparent subject PNG  |
+| 5    | Backend | uploads subject PNG to ComfyUI         | `/upload/image`          |
+| 6    | Backend | uploads/uses template background image | ComfyUI input            |
+| 7    | ComfyUI | runs `template_img2img.json`           | composite + SDXL blend   |
+| 8    | Backend | downloads result through `/view`       | `storage/output`         |
+| 9    | Android | polls task result                      | `/outputs/...` image URL |
 
 ---
 
-## 🛠 Supported tool actions
+## 🧩 Template workflow
 
-| Tool                | Uses Android input                                     | Prompt behavior                                                      | Denoise |
-| ------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- | ------- |
-| `ghibli`            | `prompt`                                               | Studio Ghibli anime style, preserve same person, cinematic, detailed | `0.55`  |
-| `ghostface`         | `prompt`                                               | Ghost Face horror style, dark atmosphere, preserve composition       | `0.50`  |
-| `glam_makeup`       | `options.makeupStyle`, `prompt`                        | professional makeup, beauty portrait, natural skin texture           | `0.28`  |
-| `remove_objects`    | `prompt`                                               | remove described object, fill area naturally                         | `0.45`  |
-| `remove_background` | `options.backgroundMode`                               | white studio background or transparent background intent             | `0.20`  |
-| `skin_improve`      | default                                                | smooth skin, reduce blemishes, preserve natural texture              | `0.18`  |
-| `upscale_image`     | default                                                | restore sharpness, clarity, fine details                             | `0.15`  |
-| `change_scene`      | `prompt`                                               | change background to user text, preserve same person                 | `0.55`  |
-| `hair_studio`       | `options.hairstyle`, `options.length`, `options.color` | realistic hair transformation, preserve same face                    | `0.30`  |
-| `smile_edit`        | `options.intensity`                                    | natural smile edit, realistic teeth, preserve same person            | `0.22`  |
+| Workflow file                     | Why separate                           | Uses                                      |
+| --------------------------------- | -------------------------------------- | ----------------------------------------- |
+| `workflows/template_img2img.json` | Templates require two image inputs     | transparent subject + template background |
+| `workflows/ai_enhancer.json`      | AI Enhancer has its own enhancer logic | not changed                               |
+| `workflows/tool_img2img.json`     | Tools share one SDXL img2img route     | not changed                               |
 
 ---
 
-## 🔢 Numeric placeholder rule
+## 🧼 Remove background modes
 
-| Placeholder | Correct                  | Wrong                      | Why                              |
-| ----------- | ------------------------ | -------------------------- | -------------------------------- |
-| `seed`      | `"seed": {{seed}}`       | `"seed": "{{seed}}"`       | ComfyUI needs number, not string |
-| `denoise`   | `"denoise": {{denoise}}` | `"denoise": "{{denoise}}"` | ComfyUI needs number, not string |
-
----
-
-## 🧠 Shared negative prompt
-
-| Purpose          | Value                                                                                                            |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Reduce artifacts | `low quality, blurry, distorted face, different person, bad anatomy, artifacts, watermark, text, ugly, deformed` |
+| Mode             | Backend behavior                   | Output                         |
+| ---------------- | ---------------------------------- | ------------------------------ |
+| `transparent`    | `rembg` cutout saved directly      | RGBA PNG with alpha            |
+| `white`          | `rembg` cutout composited on white | PNG/RGB-style white background |
+| default/fallback | white unless transparent requested | safe visible result            |
 
 ---
 
-## 🔒 Output safety
+## 📂 New / changed files
 
-| Problem                                  | Fix                                              |
-| ---------------------------------------- | ------------------------------------------------ |
-| ComfyUI could return another task output | backend validates expected output prefix         |
-| Prefix mismatch                          | logs `[COMFY_OUTPUT_PREFIX_MISMATCH]`            |
-| Wrong output from history                | rejected with `std::nullopt`                     |
-| Missing expected output                  | backend searches newest ComfyUI output by prefix |
-| Multiple simultaneous Android tasks      | ComfyUI execution serialized by mutex            |
-
----
-
-## 🧪 Validation results
-
-| Tool                | Expected output prefix       | Final status |
-| ------------------- | ---------------------------- | ------------ |
-| `ghibli`            | `pixo_ghibli_...`            | ✅ completed  |
-| `ghostface`         | `pixo_ghostface_...`         | ✅ completed  |
-| `glam_makeup`       | `pixo_glam_makeup_...`       | ✅ completed  |
-| `remove_objects`    | `pixo_remove_objects_...`    | ✅ completed  |
-| `remove_background` | `pixo_remove_background_...` | ✅ completed  |
-| `skin_improve`      | `pixo_skin_improve_...`      | ✅ completed  |
-| `upscale_image`     | `pixo_upscale_image_...`     | ✅ completed  |
-| `change_scene`      | `pixo_change_scene_...`      | ✅ completed  |
-| `hair_studio`       | `pixo_hair_studio_...`       | ✅ completed  |
-| `smile_edit`        | `pixo_smile_edit_...`        | ✅ completed  |
+| File                                              | Purpose                               |
+| ------------------------------------------------- | ------------------------------------- |
+| `workflows/template_img2img.json`                 | Template-specific ComfyUI workflow    |
+| `scripts/remove_background.py`                    | local `rembg + Pillow` helper         |
+| `src/generation/generation_json.h`                | JSON helper declarations              |
+| `src/generation/generation_json.cpp`              | JSON helper implementation            |
+| `src/generation/generation_tool_prompts.h`        | tool prompt declarations              |
+| `src/generation/generation_tool_prompts.cpp`      | tool prompt implementation            |
+| `src/generation/generation_task_store.h`          | task store declarations               |
+| `src/generation/generation_task_store.cpp`        | task store implementation             |
+| `src/generation/generation_template_workflow.h`   | template workflow declarations        |
+| `src/generation/generation_template_workflow.cpp` | template workflow implementation      |
+| `src/generation_service.cpp`                      | reduced but still large orchestration |
+| `src/generation_service.h`                        | updated declarations                  |
+| `src/comfy/workflow_builder.cpp`                  | template workflow support             |
+| `src/comfy/workflow_builder.h`                    | template workflow API                 |
 
 ---
 
-## 📊 Expected task result
+## 🔧 Include path fix after refactor
 
-| Field             | Expected                          |
-| ----------------- | --------------------------------- |
-| `status`          | `completed`                       |
-| `progressPercent` | `100`                             |
-| `resultImageUrls` | valid `/outputs/...` image URL    |
-| output ownership  | own task prefix, not another task |
-| Android change    | none                              |
+| From files inside  | Correct relative include      |
+| ------------------ | ----------------------------- |
+| `src/generation/*` | `../comfy/comfy_client.h`     |
+| `src/generation/*` | `../comfy/workflow_builder.h` |
+| `src/generation/*` | `../template_asset_service.h` |
 
 ---
 
-## ❌ Not implemented yet
+## ✅ Checked flows
 
-| Feature                        | Status          |
-| ------------------------------ | --------------- |
-| `queued` state                 | not implemented |
-| dedicated worker thread        | not implemented |
-| multiple GPU workers           | not implemented |
-| priority queue                 | not implemented |
-| cancellation                   | not implemented |
-| retry policy                   | not implemented |
-| persistent queue after restart | not implemented |
-| websocket progress             | not implemented |
-| batching                       | not implemented |
+| Flow                          | Expected                                        | Status    |
+| ----------------------------- | ----------------------------------------------- | --------- |
+| AI Enhancer                   | still uses dedicated enhancer workflow          | ✅ checked |
+| Remove Background white       | white background result                         | ✅ checked |
+| Remove Background transparent | PNG alpha result                                | ✅ checked |
+| Template `travel_style`       | template background + user subject + SDXL blend | ✅ checked |
 
 ---
 
-## 🧾 Git
+## ⚠️ Known limitations
 
-| Step   | Command                                               |
-| ------ | ----------------------------------------------------- |
-| status | `git status`                                          |
-| add    | `git add .`                                           |
-| commit | `git commit -m "Add SDXL workflows for tool actions"` |
-| push   | `git push -u origin feature/tools-sdxl-actions`       |
+| Limitation               | Current state                 | Future fix                                      |
+| ------------------------ | ----------------------------- | ----------------------------------------------- |
+| Template quality         | real but basic                | advanced template metadata + better workflows   |
+| Identity preservation    | not guaranteed                | IPAdapter / ControlNet / face identity workflow |
+| Pose transfer            | not implemented               | ControlNet pose/depth/openpose                  |
+| Subject placement        | fixed coordinates in workflow | template-specific metadata                      |
+| Subject size             | fixed workflow sizing         | `subject x/y/width/height/crop mode`            |
+| Hair/edge quality        | depends on `rembg`            | better segmentation model                       |
+| `generation_service.cpp` | still large                   | more runners/services split                     |
+| Prompt generation        | not real SDXL composition yet | next branch                                     |
 
 ---
 
-## 🏁 Final result
+## 🧭 Remaining refactor targets
 
-| Capability                                   | Status |
-| -------------------------------------------- | ------ |
-| AI Enhancer remains separate                 | ✅      |
-| 10 tools use shared SDXL img2img workflow    | ✅      |
-| Android parameters are understood by backend | ✅      |
-| seed and denoise are numeric                 | ✅      |
-| unique seed generation works                 | ✅      |
-| ComfyUI jobs are serialized                  | ✅      |
-| output prefix safety is enabled              | ✅      |
-| all 10 tools tested successfully             | ✅      |
-| current state is stable                      | ✅      |
+| Future component                      | Purpose                                            |
+| ------------------------------------- | -------------------------------------------------- |
+| `generation_comfy_runner`             | isolate ComfyUI execution                          |
+| `generation_remove_background_runner` | isolate `rembg` flow                               |
+| `generation_prompt_runner`            | isolate Prompt generation                          |
+| `generation_template_metadata`        | store per-template placement and sizing            |
+| `generation_queue_worker`             | real queued worker instead of direct orchestration |
+
+---
+
+# 🖼️ Example Results
+
+| Feature                         | Example Image                                                  | Description                                              |
+| ------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------- |
+| Remove Background (white)       | ![](readme_assets/templates/remove_background_white.png)       | Subject composited onto pure white background            |
+| Remove Background (transparent) | ![](readme_assets/templates/remove_background_transparent.png) | PNG with alpha channel generated by `rembg`              |
+| Template Generation             | ![](readme_assets/templates/template_travel_style.png)         | User subject blended into template background using SDXL |
+| Ghibli Tool                     | ![](readme_assets/templates/ghibli_example.png)                | Shared SDXL tool workflow example                        |
+| Smile Edit                      | ![](readme_assets/templates/smile_edit_example.png)            | Natural smile modification result                        |
+
+---
+
+# 📸 Verified Outputs
+
+| Action                        | Output file pattern            | Status |
+| ----------------------------- | ------------------------------ | ------ |
+| Remove Background White       | `pixo_remove_background_*.png` | ✅      |
+| Remove Background Transparent | `pixo_remove_background_*.png` | ✅      |
+| Template                      | `pixo_template_*.png`          | ✅      |
+| Ghibli                        | `pixo_ghibli_*.png`            | ✅      |
+| Smile Edit                    | `pixo_smile_edit_*.png`        | ✅      |
+
+---
+
+# 🎨 Current visual quality
+
+| Pipeline              | Image source            | Status |
+| --------------------- | ----------------------- | ------ |
+| AI Enhancer           | dedicated workflow      | ✅      |
+| Tools                 | `tool_img2img.json`     | ✅      |
+| Templates             | `template_img2img.json` | ✅      |
+| Remove Background     | `rembg`                 | ✅      |
+| Android Result Screen | `/outputs/...`          | ✅      |
+
+---
+
+## 🔜 Next stage
+
+| Branch                            | Goal                                 |
+| --------------------------------- | ------------------------------------ |
+| `feature/prompt-sdxl-composition` | implement Prompt generation properly |
+| `feature/prompt-sdxl-multi-image` | alternative name for same next stage |
+
+---
+
+## 🎯 Prompt target behavior
+
+| Prompt case     | Current                           | Target                                   |
+| --------------- | --------------------------------- | ---------------------------------------- |
+| 1 image         | mostly pass-through/simple return | SDXL img2img with user prompt            |
+| 2 images        | mostly pass-through/simple return | collage/contact sheet/composition input  |
+| 3–5 images      | mostly pass-through/simple return | multi-image composition input            |
+| positive prompt | partially used                    | user prompt becomes SDXL positive prompt |
+| result          | may not be real composition       | generated `/outputs/...` URL             |
+
+---
+
+## 🧾 Recommended next branch
+
+| Step               | Command                                           |
+| ------------------ | ------------------------------------------------- |
+| create next branch | `git checkout -b feature/prompt-sdxl-composition` |
+
+---
+
+## 🏁 Final state
+
+| Capability                                        | Status |
+| ------------------------------------------------- | ------ |
+| Templates no longer return original upload        | ✅      |
+| Templates use user image + template image         | ✅      |
+| Template assets come from existing asset pipeline | ✅      |
+| Transparent subject PNG generated                 | ✅      |
+| Template workflow uses two images                 | ✅      |
+| Remove Background fixed with direct `rembg`       | ✅      |
+| Transparent mode outputs alpha PNG                | ✅      |
+| White mode outputs white background               | ✅      |
+| Partial generation refactor done                  | ✅      |
+| AI Enhancer preserved                             | ✅      |
+| Tools preserved                                   | ✅      |
+| Prompt remains next major block                   | ⏭️     |
 
 ---
 
 ## ⬅️ Назад
 
-| Link        | URL                                                                                                                                              |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Main README | [https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
-
+| Link        | URL                                                                    |
+| ----------- | ---------------------------------------------------------------------- |
+| Main README | https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md |

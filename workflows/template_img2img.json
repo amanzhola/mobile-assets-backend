@@ -1,0 +1,112 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{input_image}}"
+    },
+    "_meta": {
+      "title": "Load Transparent User Subject"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{template_image}}"
+    },
+    "_meta": {
+      "title": "Load Template Background"
+    }
+  },
+  "3": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": ["2", 0],
+      "upscale_method": "lanczos",
+      "width": 1024,
+      "height": 768,
+      "crop": "disabled"
+    },
+    "_meta": {
+      "title": "Resize Template"
+    }
+  },
+  "4": {
+    "class_type": "InvertMask",
+    "inputs": {
+      "mask": ["1", 1]
+    },
+    "_meta": {
+      "title": "Invert Alpha Mask"
+    }
+  },
+  "5": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": ["3", 0],
+      "source": ["1", 0],
+      "x": 192,
+      "y": 150,
+      "resize_source": false,
+      "mask": ["4", 0]
+    },
+    "_meta": {
+      "title": "Composite User Over Template"
+    }
+  },
+  "6": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "Juggernaut-XL_Lightning.safetensors"
+    }
+  },
+  "7": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": ["5", 0],
+      "vae": ["6", 2]
+    }
+  },
+  "8": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "{{positive_prompt}}",
+      "clip": ["6", 1]
+    }
+  },
+  "9": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "{{negative_prompt}}",
+      "clip": ["6", 1]
+    }
+  },
+  "10": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "{{seed}}",
+      "steps": 8,
+      "cfg": 1.8,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": "{{denoise}}",
+      "model": ["6", 0],
+      "positive": ["8", 0],
+      "negative": ["9", 0],
+      "latent_image": ["7", 0]
+    }
+  },
+  "11": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["10", 0],
+      "vae": ["6", 2]
+    }
+  },
+  "12": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["11", 0],
+      "filename_prefix": "{{output_prefix}}"
+    }
+  }
+}

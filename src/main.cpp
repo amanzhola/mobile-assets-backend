@@ -4,6 +4,7 @@
 #include "http_server.h"
 #include "upload_service.h"
 #include "output_service.h"
+#include "template_asset_service.h"
 #include "comfy/comfy_client.h"
 #include "comfy/workflow_builder.h"
 
@@ -44,6 +45,10 @@ int main() {
             root / "storage/output",
             public_base_url
         };
+        
+        templates::TemplateAssetService template_asset_service{
+		    root / "storage/template_cache"
+		};
 
         const char* comfy_url_env = std::getenv("COMFY_BASE_URL");
 
@@ -72,6 +77,7 @@ int main() {
             comfy_client,
             workflow_builder,
             output_service,
+            template_asset_service,
             root / "storage/input",
             fs::path{home_env} / "ComfyUI" / "input",
             fs::path{home_env} / "ComfyUI" / "output"

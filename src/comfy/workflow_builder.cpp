@@ -40,6 +40,7 @@ json::object WorkflowBuilder::LoadWorkflowTemplate(
 void WorkflowBuilder::ReplacePlaceholders(
     json::value& value,
     const std::string& input_image_file_name,
+    const std::string& template_image_file_name,
     const std::string& output_prefix,
     const std::string& positive_prompt,
     const std::string& negative_prompt,
@@ -51,6 +52,16 @@ void WorkflowBuilder::ReplacePlaceholders(
 
         if (text == "{{input_image}}") {
             value = input_image_file_name;
+            return;
+        }
+
+        if (text == "{{user_image}}") {
+            value = input_image_file_name;
+            return;
+        }
+
+        if (text == "{{template_image}}") {
+            value = template_image_file_name;
             return;
         }
 
@@ -87,6 +98,7 @@ void WorkflowBuilder::ReplacePlaceholders(
             ReplacePlaceholders(
                 item.value(),
                 input_image_file_name,
+                template_image_file_name,
                 output_prefix,
                 positive_prompt,
                 negative_prompt,
@@ -103,6 +115,7 @@ void WorkflowBuilder::ReplacePlaceholders(
             ReplacePlaceholders(
                 item,
                 input_image_file_name,
+                template_image_file_name,
                 output_prefix,
                 positive_prompt,
                 negative_prompt,
@@ -159,6 +172,7 @@ json::object WorkflowBuilder::BuildWorkflow(
     ReplacePlaceholders(
         workflow_value,
         input_image_file_name,
+        "",
         output_prefix,
         positive_prompt,
         negative_prompt,
@@ -205,6 +219,43 @@ json::object WorkflowBuilder::BuildToolWorkflow(
     ReplacePlaceholders(
         workflow_value,
         input_image_file_name,
+        "",
+        output_prefix,
+        positive_prompt,
+        negative_prompt,
+        denoise,
+        seed
+    );
+
+    return workflow_value.as_object();
+}
+
+json::object WorkflowBuilder::BuildTemplateWorkflow(
+    const std::string& user_image_file_name,
+    const std::string& template_image_file_name,
+    const std::string& output_prefix,
+    const std::string& positive_prompt,
+    double denoise
+) const {
+    const std::string negative_prompt =
+        "different person, changed identity, distorted face, bad anatomy, low quality, blurry, watermark, text, artifacts";
+
+    const int64_t seed =
+        static_cast<int64_t>(
+            std::chrono::steady_clock::now()
+                .time_since_epoch()
+                .count() % 2147483647
+        );
+
+    json::object workflow =
+        LoadWorkflowTemplate("template_img2img.json");
+
+    json::value workflow_value = workflow;
+
+    ReplacePlaceholders(
+        workflow_value,
+        user_image_file_name,
+        template_image_file_name,
         output_prefix,
         positive_prompt,
         negative_prompt,
