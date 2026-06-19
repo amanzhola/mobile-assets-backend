@@ -23,7 +23,7 @@ Backend для AI-генерации изображений, шаблонов, u
 | `feature/ai-enhancer-ultrasharp`   | UltraSharp enhancer             | sharpen workflow                          | [README](https://github.com/amanzhola/mobile-assets-backend/tree/feature/ai-enhancer-ultrasharp/README.md)   |
 | `feature/ai-enhancer-kaggle-comfy` | Kaggle + ComfyUI                | external workflows                        | [README](https://github.com/amanzhola/mobile-assets-backend/tree/feature/ai-enhancer-kaggle-comfy/README.md) |
 | `feature/tools-sdxl-actions`       | SDXL actions для Tools          | общий `tool_img2img.json`, 10 tool actions через ComfyUI SDXL img2img, AI Enhancer отдельно | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/tools-sdxl-actions/README.md) |
-
+| `feature/templates-sdxl-actions`   | SDXL generation для Templates   | 24 templates через `template_img2img.json`, user image участвует в композиции, template background + transparent subject + SDXL blending | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/templates-sdxl-actions/README.md) |
 ---
 
 # 🖥 Terminal 1 — Build + Run + Git
