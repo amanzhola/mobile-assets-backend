@@ -832,13 +832,13 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
         return std::nullopt;
     }
 }
-
+/*
 std::vector<std::string> GenerationService::RunGenerationViaComfy(
     const json::object& request,
     const std::string& task_id,
     const std::string& server_action,
     int output_count
-) {
+) {	
 	UpdateTaskProgress(task_id, 1);
 	std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
 	
@@ -890,6 +890,79 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
     }
 
     while (!result_urls.empty() && static_cast<int>(result_urls.size()) < output_count) {
+        result_urls.push_back(result_urls.front());
+    }
+
+    return result_urls;
+}
+*/
+
+std::vector<std::string> GenerationService::RunGenerationViaComfy(
+    const json::object& request,
+    const std::string& task_id,
+    const std::string& server_action,
+    int output_count
+) {
+    std::vector<std::string> result_urls;
+
+    if (server_action == "template" || server_action == "prompt") {
+        const auto uploaded_image_urls =
+            ReadStringArray(request, "uploadedImageUrls");
+
+        const std::string source_image_url =
+            ReadStringOrEmpty(request, "sourceImageUrl");
+
+        if (!uploaded_image_urls.empty()) {
+            result_urls = uploaded_image_urls;
+        } else if (!source_image_url.empty()) {
+            result_urls.push_back(source_image_url);
+        }
+
+        while (
+            !result_urls.empty() &&
+            static_cast<int>(result_urls.size()) < output_count
+        ) {
+            result_urls.push_back(result_urls.front());
+        }
+
+        UpdateTaskProgress(task_id, 100);
+
+        return result_urls;
+    }
+
+    UpdateTaskProgress(task_id, 1);
+
+    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+
+    UpdateTaskProgress(task_id, 10);
+
+    const std::vector<std::string> input_file_names =
+        ExtractUploadedFileNames(request);
+
+    if (input_file_names.empty()) {
+        return result_urls;
+    }
+
+    const std::string enhance_mode =
+        ReadOptionString(request, "enhanceMode");
+
+    auto output_url = RunSingleImageViaComfy(
+        request,
+        input_file_names.front(),
+        task_id,
+        server_action,
+        0,
+        enhance_mode
+    );
+
+    if (output_url) {
+        result_urls.push_back(*output_url);
+    }
+
+    while (
+        !result_urls.empty() &&
+        static_cast<int>(result_urls.size()) < output_count
+    ) {
         result_urls.push_back(result_urls.front());
     }
 
