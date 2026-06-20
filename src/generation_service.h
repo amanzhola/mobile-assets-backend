@@ -5,6 +5,7 @@
 #include "output_service.h"
 #include "template_asset_service.h"
 #include "generation/generation_task_store.h"
+#include "local_tools/local_tool_runner.h"
 
 #include <boost/json.hpp>
 
@@ -30,6 +31,7 @@ public:
         comfy::WorkflowBuilder& workflow_builder,
         output::OutputService& output_service,
         templates::TemplateAssetService& template_asset_service,
+        local_tools::LocalToolRunner& local_tool_runner,
         fs::path backend_input_dir,
         fs::path comfy_input_dir,
         fs::path comfy_output_dir
@@ -126,6 +128,7 @@ private:
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
     templates::TemplateAssetService& template_asset_service_;
+    local_tools::LocalToolRunner& local_tool_runner_;
 
     fs::path backend_input_dir_;
     fs::path comfy_input_dir_;

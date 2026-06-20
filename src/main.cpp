@@ -7,6 +7,7 @@
 #include "template_asset_service.h"
 #include "comfy/comfy_client.h"
 #include "comfy/workflow_builder.h"
+#include "local_tools/local_tool_runner.h"
 
 #include <boost/asio.hpp>
 
@@ -27,12 +28,11 @@ int main() {
         net::io_context ioc{1};
 
         const fs::path root = fs::path{"/home/ubuntu/mobile-assets-backend"};
+        const fs::path backend_input_dir = root / "storage/input";
 
         catalog::CatalogService catalog_service{root / "data"};
 
-        upload::UploadService upload_service{
-            root / "storage/input"
-        };
+        upload::UploadService upload_service{ backend_input_dir };
 
         const char* public_base_url_env = std::getenv("PUBLIC_BASE_URL");
 
@@ -70,6 +70,12 @@ int main() {
         if (home_env == nullptr) {
             throw std::runtime_error("HOME environment variable is not set");
         }
+        
+        local_tools::LocalToolRunner local_tool_runner{
+		    root,
+		    backend_input_dir,
+		    output_service
+		};
 
         generation::GenerationService generation_service{
             root / "storage/tasks.json",
@@ -78,7 +84,8 @@ int main() {
             workflow_builder,
             output_service,
             template_asset_service,
-            root / "storage/input",
+            local_tool_runner,
+            backend_input_dir,
             fs::path{home_env} / "ComfyUI" / "input",
             fs::path{home_env} / "ComfyUI" / "output"
         };

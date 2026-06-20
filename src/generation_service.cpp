@@ -28,6 +28,7 @@ GenerationService::GenerationService(
     comfy::WorkflowBuilder& workflow_builder,
     output::OutputService& output_service,
     templates::TemplateAssetService& template_asset_service,
+    local_tools::LocalToolRunner& local_tool_runner,
     fs::path backend_input_dir,
     fs::path comfy_input_dir,
     fs::path comfy_output_dir
@@ -38,6 +39,7 @@ GenerationService::GenerationService(
     , workflow_builder_{workflow_builder}
     , output_service_{output_service}
     , template_asset_service_{template_asset_service}
+    , local_tool_runner_{local_tool_runner}
     , backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
     , comfy_output_dir_{std::move(comfy_output_dir)} {
@@ -565,7 +567,74 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 ) {
     std::vector<std::string> result_urls;
     
-    if (server_action == "remove_background") {
+//    if (server_action == "remove_background") {
+//	    const auto input_file_names =
+//	        ExtractUploadedFileNames(request);
+//	
+//	    if (input_file_names.empty()) {
+//	        return result_urls;
+//	    }
+//	
+//		const std::string background_type =
+//		    ReadOptionString(request, "backgroundType");
+//	
+//	    const std::string final_mode =
+//    		background_type == "transparent" ? "transparent" : "white";
+//	
+//	    const fs::path input_file =
+//	        backend_input_dir_ / input_file_names.front();
+//	
+//	    const std::string output_name =
+//	        "pixo_remove_background_" + task_id + ".png";
+//	
+//	    const fs::path output_file =
+//	        output_service_.GetFilePath(output_name);
+//	
+//	    const std::string command =
+//	        "cd /home/ubuntu/mobile-assets-backend && "
+//	        ".venv-tools/bin/python3 scripts/remove_background.py "
+//	        "\"" + input_file.string() + "\" "
+//	        "\"" + output_file.string() + "\" "
+//	        + final_mode;
+//	
+//	    std::cout
+//	        << "[REMOVE_BACKGROUND_START]\n"
+//	        << "input=" << input_file.string() << "\n"
+//	        << "output=" << output_file.string() << "\n"
+//	        << "mode=" << final_mode << "\n"
+//	        << std::endl;
+//	
+//	    const int result =
+//	        std::system(command.c_str());
+//	
+//	    if (
+//	        result == 0 &&
+//	        fs::exists(output_file) &&
+//	        fs::file_size(output_file) > 0
+//	    ) {
+//	        result_urls.push_back(
+//	            output_service_.GetPublicUrl(output_name)
+//	        );
+//	    } else {
+//	        std::cout
+//	            << "[REMOVE_BACKGROUND_FAILED]\n"
+//	            << "result=" << result << "\n"
+//	            << std::endl;
+//	    }
+//	
+//	    while (
+//	        !result_urls.empty() &&
+//	        static_cast<int>(result_urls.size()) < output_count
+//	    ) {
+//	        result_urls.push_back(result_urls.front());
+//	    }
+//	
+//	    UpdateTaskProgress(task_id, 100);
+//	
+//	    return result_urls;
+//	}
+	
+	if (server_action == "remove_background") {
 	    const auto input_file_names =
 	        ExtractUploadedFileNames(request);
 	
@@ -573,51 +642,15 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        return result_urls;
 	    }
 	
-		const std::string background_type =
-		    ReadOptionString(request, "backgroundType");
-	
-	    const std::string final_mode =
-    		background_type == "transparent" ? "transparent" : "white";
-	
-	    const fs::path input_file =
-	        backend_input_dir_ / input_file_names.front();
-	
-	    const std::string output_name =
-	        "pixo_remove_background_" + task_id + ".png";
-	
-	    const fs::path output_file =
-	        output_service_.GetFilePath(output_name);
-	
-	    const std::string command =
-	        "cd /home/ubuntu/mobile-assets-backend && "
-	        ".venv-tools/bin/python3 scripts/remove_background.py "
-	        "\"" + input_file.string() + "\" "
-	        "\"" + output_file.string() + "\" "
-	        + final_mode;
-	
-	    std::cout
-	        << "[REMOVE_BACKGROUND_START]\n"
-	        << "input=" << input_file.string() << "\n"
-	        << "output=" << output_file.string() << "\n"
-	        << "mode=" << final_mode << "\n"
-	        << std::endl;
-	
-	    const int result =
-	        std::system(command.c_str());
-	
-	    if (
-	        result == 0 &&
-	        fs::exists(output_file) &&
-	        fs::file_size(output_file) > 0
-	    ) {
-	        result_urls.push_back(
-	            output_service_.GetPublicUrl(output_name)
+	    auto output_url =
+	        local_tool_runner_.RunRemoveBackground(
+	            task_id,
+	            input_file_names.front(),
+	            request
 	        );
-	    } else {
-	        std::cout
-	            << "[REMOVE_BACKGROUND_FAILED]\n"
-	            << "result=" << result << "\n"
-	            << std::endl;
+	
+	    if (output_url) {
+	        result_urls.push_back(*output_url);
 	    }
 	
 	    while (
@@ -631,7 +664,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	
 	    return result_urls;
 	}
-
+	
     if (server_action == "prompt") {
         const auto uploaded_image_urls =
             ReadStringArray(request, "uploadedImageUrls");

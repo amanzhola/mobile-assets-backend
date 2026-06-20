@@ -33,6 +33,7 @@ add_executable(mobile_assets_backend
     src/generation/generation_tool_prompts.cpp
     src/generation/generation_task_store.cpp
     src/generation/generation_template_workflow.cpp
+    src/local_tools/local_tool_runner.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE
