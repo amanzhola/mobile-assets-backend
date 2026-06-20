@@ -10,7 +10,6 @@ bool IsToolAction(
     return action == "ghibli" ||
            action == "ghostface" ||
            action == "glam_makeup" ||
-//           action == "remove_objects" ||
            action == "remove_background" ||
            action == "skin_improve" ||
            action == "upscale_image" ||
@@ -53,12 +52,6 @@ std::string BuildToolPositivePrompt(
 
         return result;
     }
-
-//    if (server_action == "remove_objects") {
-//        return prompt.empty()
-//            ? "Remove unwanted objects from the image naturally, fill background realistically."
-//            : "Remove from image: " + prompt + ", fill the area naturally, realistic background.";
-//    }
 
     if (server_action == "remove_background") {
         std::string background_type =
@@ -170,7 +163,6 @@ double ResolveToolDenoise(
     if (server_action == "ghibli") return 0.55;
     if (server_action == "ghostface") return 0.50;
     if (server_action == "glam_makeup") return 0.28;
-//    if (server_action == "remove_objects") return 0.45;
     if (server_action == "remove_background") return 0.20;
     if (server_action == "skin_improve") return 0.18;
     if (server_action == "upscale_image") return 0.15;

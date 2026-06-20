@@ -126,6 +126,48 @@ void WorkflowBuilder::ReplacePlaceholders(
     }
 }
 
+namespace {
+
+void ReplaceStringPlaceholder(
+    json::value& value,
+    const std::string& placeholder,
+    const std::string& replacement
+) {
+    if (value.is_string()) {
+        std::string current = std::string(value.as_string());
+
+        if (current == placeholder) {
+            value = replacement;
+        }
+
+        return;
+    }
+
+    if (value.is_object()) {
+        for (auto& item : value.as_object()) {
+            ReplaceStringPlaceholder(
+                item.value(),
+                placeholder,
+                replacement
+            );
+        }
+
+        return;
+    }
+
+    if (value.is_array()) {
+        for (auto& item : value.as_array()) {
+            ReplaceStringPlaceholder(
+                item,
+                placeholder,
+                replacement
+            );
+        }
+    }
+}
+
+}  // namespace
+
 json::object WorkflowBuilder::BuildWorkflow(
     const std::string& server_action,
     const std::string& input_image_file_name,
@@ -261,6 +303,48 @@ json::object WorkflowBuilder::BuildTemplateWorkflow(
         negative_prompt,
         denoise,
         seed
+    );
+
+    return workflow_value.as_object();
+}
+
+json::object WorkflowBuilder::BuildRemoveObjectsInpaintWorkflow(
+    const std::string& input_image_file_name,
+    const std::string& mask_image_file_name,
+    const std::string& output_prefix,
+    const std::string& positive_prompt,
+    double denoise
+) const {
+    json::object workflow =
+        LoadWorkflowTemplate("remove_objects_inpaint.json");
+
+    const std::string negative_prompt =
+    "changed person, removed head, removed face, changed face, green color mismatch, mismatched background, different lighting, blurry, low quality, artifacts, watermark, text";
+
+    const int64_t seed =
+        static_cast<int64_t>(
+            std::chrono::steady_clock::now()
+                .time_since_epoch()
+                .count() % 2147483647
+        );
+
+    json::value workflow_value = workflow;
+
+    ReplacePlaceholders(
+        workflow_value,
+        input_image_file_name,
+        "",
+        output_prefix,
+        positive_prompt,
+        negative_prompt,
+        denoise,
+        seed
+    );
+
+    ReplaceStringPlaceholder(
+        workflow_value,
+        "{{mask_image}}",
+        mask_image_file_name
     );
 
     return workflow_value.as_object();

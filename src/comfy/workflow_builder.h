@@ -41,6 +41,14 @@ public:
         const std::string& positive_prompt,
         double denoise
     ) const;
+    
+    json::object BuildRemoveObjectsInpaintWorkflow(
+	    const std::string& input_image_file_name,
+	    const std::string& mask_image_file_name,
+	    const std::string& output_prefix,
+	    const std::string& positive_prompt,
+	    double denoise
+	) const;
 
 private:
     json::object LoadWorkflowTemplate(const std::string& file_name) const;

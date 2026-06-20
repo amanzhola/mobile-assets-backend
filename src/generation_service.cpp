@@ -374,6 +374,56 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
 		    }
 		
 		    workflow = std::move(template_workflow->workflow);
+		    
+		} else if (server_action == "remove_objects") {
+		    auto mask_file_name =
+		        local_tool_runner_.CreateRemoveObjectsMask(
+		            task_id,
+		            image_index,
+		            input_file_name,
+		            request
+		        );
+		
+		    if (!mask_file_name) {
+		        return std::nullopt;
+		    }
+		
+		    const fs::path backend_mask_file =
+		        backend_input_dir_ / *mask_file_name;
+		
+		    const fs::path comfy_mask_file =
+		        comfy_input_dir_ / *mask_file_name;
+		
+		    fs::copy_file(
+		        backend_mask_file,
+		        comfy_mask_file,
+		        fs::copy_options::overwrite_existing
+		    );
+		
+		    const bool mask_uploaded =
+		        comfy_client_.UploadImage(
+		            backend_mask_file,
+		            *mask_file_name
+		        );
+		
+		    if (!mask_uploaded) {
+		        return std::nullopt;
+		    }
+		
+		    const std::string object_text =
+		        ReadStringOrEmpty(request, "prompt");
+		
+		    const std::string positive_prompt =
+    "remove only the selected object, fill the removed area by matching the surrounding pixels, same colors, same lighting, same texture, preserve the person, preserve head, preserve face, realistic photo";
+			
+			workflow =
+			    workflow_builder_.BuildRemoveObjectsInpaintWorkflow(
+			        input_file_name,
+			        *mask_file_name,
+			        output_prefix,
+			        positive_prompt,
+			        0.55
+			    );
 
         } else if (IsToolAction(server_action)) {
             std::cout
@@ -566,106 +616,8 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
     int output_count
 ) {
     std::vector<std::string> result_urls;
-    
-//    if (server_action == "remove_background") {
-//	    const auto input_file_names =
-//	        ExtractUploadedFileNames(request);
-//	
-//	    if (input_file_names.empty()) {
-//	        return result_urls;
-//	    }
-//	
-//		const std::string background_type =
-//		    ReadOptionString(request, "backgroundType");
-//	
-//	    const std::string final_mode =
-//    		background_type == "transparent" ? "transparent" : "white";
-//	
-//	    const fs::path input_file =
-//	        backend_input_dir_ / input_file_names.front();
-//	
-//	    const std::string output_name =
-//	        "pixo_remove_background_" + task_id + ".png";
-//	
-//	    const fs::path output_file =
-//	        output_service_.GetFilePath(output_name);
-//	
-//	    const std::string command =
-//	        "cd /home/ubuntu/mobile-assets-backend && "
-//	        ".venv-tools/bin/python3 scripts/remove_background.py "
-//	        "\"" + input_file.string() + "\" "
-//	        "\"" + output_file.string() + "\" "
-//	        + final_mode;
-//	
-//	    std::cout
-//	        << "[REMOVE_BACKGROUND_START]\n"
-//	        << "input=" << input_file.string() << "\n"
-//	        << "output=" << output_file.string() << "\n"
-//	        << "mode=" << final_mode << "\n"
-//	        << std::endl;
-//	
-//	    const int result =
-//	        std::system(command.c_str());
-//	
-//	    if (
-//	        result == 0 &&
-//	        fs::exists(output_file) &&
-//	        fs::file_size(output_file) > 0
-//	    ) {
-//	        result_urls.push_back(
-//	            output_service_.GetPublicUrl(output_name)
-//	        );
-//	    } else {
-//	        std::cout
-//	            << "[REMOVE_BACKGROUND_FAILED]\n"
-//	            << "result=" << result << "\n"
-//	            << std::endl;
-//	    }
-//	
-//	    while (
-//	        !result_urls.empty() &&
-//	        static_cast<int>(result_urls.size()) < output_count
-//	    ) {
-//	        result_urls.push_back(result_urls.front());
-//	    }
-//	
-//	    UpdateTaskProgress(task_id, 100);
-//	
-//	    return result_urls;
-//	}
-	
+    	
 	if (server_action == "remove_background") {
-		    const auto input_file_names =
-		        ExtractUploadedFileNames(request);
-		
-		    if (input_file_names.empty()) {
-		        return result_urls;
-		    }
-		
-		    auto output_url =
-		        local_tool_runner_.RunRemoveBackground(
-		            task_id,
-		            input_file_names.front(),
-		            request
-		        );
-		
-		    if (output_url) {
-		        result_urls.push_back(*output_url);
-		    }
-		
-		    while (
-		        !result_urls.empty() &&
-		        static_cast<int>(result_urls.size()) < output_count
-		    ) {
-		        result_urls.push_back(result_urls.front());
-		    }
-		
-		    UpdateTaskProgress(task_id, 100);
-		
-		    return result_urls;
-		}
-		
-		if (server_action == "remove_objects") {
 	    const auto input_file_names =
 	        ExtractUploadedFileNames(request);
 	
@@ -674,7 +626,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	    }
 	
 	    auto output_url =
-	        local_tool_runner_.RunRemoveObjects(
+	        local_tool_runner_.RunRemoveBackground(
 	            task_id,
 	            input_file_names.front(),
 	            request
@@ -695,7 +647,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	
 	    return result_urls;
 	}
-	
+		
     if (server_action == "prompt") {
         const auto uploaded_image_urls =
             ReadStringArray(request, "uploadedImageUrls");

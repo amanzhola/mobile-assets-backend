@@ -26,12 +26,13 @@ public:
         const std::string& input_file_name,
         const json::object& request
     );
-
-    std::optional<std::string> RunRemoveObjects(
-        const std::string& task_id,
-        const std::string& input_file_name,
-        const json::object& request
-    );
+    
+    std::optional<std::string> CreateRemoveObjectsMask(
+	    const std::string& task_id,
+	    int image_index,
+	    const std::string& input_file_name,
+	    const json::object& request
+	);
 
 private:
     std::string ReadOptionString(

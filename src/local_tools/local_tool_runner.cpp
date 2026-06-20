@@ -53,12 +53,15 @@ std::optional<std::string> LocalToolRunner::RunRemoveBackground(
     const std::string& input_file_name,
     const json::object& request
 ) {
-    const fs::path input_file = backend_input_dir_ / input_file_name;
+    const fs::path input_file =
+        backend_input_dir_ / input_file_name;
 
     if (!fs::exists(input_file)) {
-        std::cout << "[LOCAL_REMOVE_BACKGROUND_INPUT_MISSING]\n"
-                  << "file=" << input_file.string() << "\n"
-                  << std::endl;
+        std::cout
+            << "[LOCAL_REMOVE_BACKGROUND_INPUT_MISSING]\n"
+            << "file=" << input_file.string() << "\n"
+            << std::endl;
+
         return std::nullopt;
     }
 
@@ -85,43 +88,52 @@ std::optional<std::string> LocalToolRunner::RunRemoveBackground(
         "\"" + output_file.string() + "\" "
         + mode;
 
-    std::cout << "[LOCAL_REMOVE_BACKGROUND_START]\n"
-              << "input=" << input_file.string() << "\n"
-              << "output=" << output_file.string() << "\n"
-              << "mode=" << mode << "\n"
-              << std::endl;
+    std::cout
+        << "[LOCAL_REMOVE_BACKGROUND_START]\n"
+        << "input=" << input_file.string() << "\n"
+        << "output=" << output_file.string() << "\n"
+        << "mode=" << mode << "\n"
+        << std::endl;
 
-    const int result = std::system(command.c_str());
+    const int result =
+        std::system(command.c_str());
 
     if (
         result != 0 ||
         !fs::exists(output_file) ||
         fs::file_size(output_file) == 0
     ) {
-        std::cout << "[LOCAL_REMOVE_BACKGROUND_FAILED]\n"
-                  << "result=" << result << "\n"
-                  << std::endl;
+        std::cout
+            << "[LOCAL_REMOVE_BACKGROUND_FAILED]\n"
+            << "result=" << result << "\n"
+            << std::endl;
+
         return std::nullopt;
     }
 
     return output_service_.GetPublicUrl(output_name);
 }
 
-std::optional<std::string> LocalToolRunner::RunRemoveObjects(
+std::optional<std::string> LocalToolRunner::CreateRemoveObjectsMask(
     const std::string& task_id,
+    int image_index,
     const std::string& input_file_name,
     const json::object& request
 ) {
-    const fs::path input_file = backend_input_dir_ / input_file_name;
+    const fs::path input_file =
+        backend_input_dir_ / input_file_name;
 
     if (!fs::exists(input_file)) {
-        std::cout << "[LOCAL_REMOVE_OBJECTS_INPUT_MISSING]\n"
-                  << "file=" << input_file.string() << "\n"
-                  << std::endl;
+        std::cout
+            << "[REMOVE_OBJECTS_MASK_INPUT_MISSING]\n"
+            << "file=" << input_file.string() << "\n"
+            << std::endl;
+
         return std::nullopt;
     }
 
-    std::string object_text = ReadStringOrEmpty(request, "prompt");
+    std::string object_text =
+        ReadStringOrEmpty(request, "prompt");
 
     if (object_text.empty()) {
         object_text = ReadOptionString(request, "objectText");
@@ -132,44 +144,57 @@ std::optional<std::string> LocalToolRunner::RunRemoveObjects(
     }
 
     if (object_text.empty()) {
-        std::cout << "[LOCAL_REMOVE_OBJECTS_EMPTY_PROMPT]\n" << std::endl;
+        std::cout
+            << "[REMOVE_OBJECTS_MASK_EMPTY_PROMPT]\n"
+            << std::endl;
+
         return std::nullopt;
     }
 
-    const std::string output_name =
-        "pixo_remove_objects_" + task_id + ".png";
+    const std::string mask_file_name =
+        "mask_remove_objects_" + task_id + "_" +
+        std::to_string(image_index) + ".png";
 
-    const fs::path output_file =
-        output_service_.GetFilePath(output_name);
+    const fs::path mask_file =
+        backend_input_dir_ / mask_file_name;
 
     const std::string command =
         "cd \"" + project_root_.string() + "\" && "
-        ".venv-tools/bin/python3 scripts/remove_objects.py "
+        ".venv-tools/bin/python3 scripts/create_object_mask.py "
         "\"" + input_file.string() + "\" "
-        "\"" + output_file.string() + "\" "
+        "\"" + mask_file.string() + "\" "
         "\"" + object_text + "\" "
-        "0.35";
+        "0.45";
 
-    std::cout << "[LOCAL_REMOVE_OBJECTS_START]\n"
-              << "input=" << input_file.string() << "\n"
-              << "output=" << output_file.string() << "\n"
-              << "objectText=" << object_text << "\n"
-              << std::endl;
+    std::cout
+        << "[REMOVE_OBJECTS_MASK_START]\n"
+        << "input=" << input_file.string() << "\n"
+        << "mask=" << mask_file.string() << "\n"
+        << "objectText=" << object_text << "\n"
+        << std::endl;
 
-    const int result = std::system(command.c_str());
+    const int result =
+        std::system(command.c_str());
 
     if (
         result != 0 ||
-        !fs::exists(output_file) ||
-        fs::file_size(output_file) == 0
+        !fs::exists(mask_file) ||
+        fs::file_size(mask_file) == 0
     ) {
-        std::cout << "[LOCAL_REMOVE_OBJECTS_FAILED]\n"
-                  << "result=" << result << "\n"
-                  << std::endl;
+        std::cout
+            << "[REMOVE_OBJECTS_MASK_FAILED]\n"
+            << "result=" << result << "\n"
+            << std::endl;
+
         return std::nullopt;
     }
 
-    return output_service_.GetPublicUrl(output_name);
+    std::cout
+        << "[REMOVE_OBJECTS_MASK_OK]\n"
+        << "maskFileName=" << mask_file_name << "\n"
+        << std::endl;
+
+    return mask_file_name;
 }
 
 }  // namespace local_tools
