@@ -635,6 +635,37 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 //	}
 	
 	if (server_action == "remove_background") {
+		    const auto input_file_names =
+		        ExtractUploadedFileNames(request);
+		
+		    if (input_file_names.empty()) {
+		        return result_urls;
+		    }
+		
+		    auto output_url =
+		        local_tool_runner_.RunRemoveBackground(
+		            task_id,
+		            input_file_names.front(),
+		            request
+		        );
+		
+		    if (output_url) {
+		        result_urls.push_back(*output_url);
+		    }
+		
+		    while (
+		        !result_urls.empty() &&
+		        static_cast<int>(result_urls.size()) < output_count
+		    ) {
+		        result_urls.push_back(result_urls.front());
+		    }
+		
+		    UpdateTaskProgress(task_id, 100);
+		
+		    return result_urls;
+		}
+		
+		if (server_action == "remove_objects") {
 	    const auto input_file_names =
 	        ExtractUploadedFileNames(request);
 	
@@ -643,7 +674,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	    }
 	
 	    auto output_url =
-	        local_tool_runner_.RunRemoveBackground(
+	        local_tool_runner_.RunRemoveObjects(
 	            task_id,
 	            input_file_names.front(),
 	            request

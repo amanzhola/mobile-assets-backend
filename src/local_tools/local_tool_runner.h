@@ -3,10 +3,10 @@
 #include "../output_service.h"
 
 #include <boost/json.hpp>
+
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace local_tools {
 
@@ -27,8 +27,19 @@ public:
         const json::object& request
     );
 
+    std::optional<std::string> RunRemoveObjects(
+        const std::string& task_id,
+        const std::string& input_file_name,
+        const json::object& request
+    );
+
 private:
     std::string ReadOptionString(
+        const json::object& request,
+        const std::string& key
+    ) const;
+
+    std::string ReadStringOrEmpty(
         const json::object& request,
         const std::string& key
     ) const;

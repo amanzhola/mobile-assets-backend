@@ -35,20 +35,30 @@ std::string LocalToolRunner::ReadOptionString(
     return std::string(value_it->value().as_string());
 }
 
+std::string LocalToolRunner::ReadStringOrEmpty(
+    const json::object& request,
+    const std::string& key
+) const {
+    auto it = request.find(key);
+
+    if (it == request.end() || !it->value().is_string()) {
+        return {};
+    }
+
+    return std::string(it->value().as_string());
+}
+
 std::optional<std::string> LocalToolRunner::RunRemoveBackground(
     const std::string& task_id,
     const std::string& input_file_name,
     const json::object& request
 ) {
-    const fs::path input_file =
-        backend_input_dir_ / input_file_name;
+    const fs::path input_file = backend_input_dir_ / input_file_name;
 
     if (!fs::exists(input_file)) {
-        std::cout
-            << "[LOCAL_REMOVE_BACKGROUND_INPUT_MISSING]\n"
-            << "file=" << input_file.string() << "\n"
-            << std::endl;
-
+        std::cout << "[LOCAL_REMOVE_BACKGROUND_INPUT_MISSING]\n"
+                  << "file=" << input_file.string() << "\n"
+                  << std::endl;
         return std::nullopt;
     }
 
@@ -75,39 +85,91 @@ std::optional<std::string> LocalToolRunner::RunRemoveBackground(
         "\"" + output_file.string() + "\" "
         + mode;
 
-    std::cout
-        << "[LOCAL_REMOVE_BACKGROUND_START]\n"
-        << "input=" << input_file.string() << "\n"
-        << "output=" << output_file.string() << "\n"
-        << "mode=" << mode << "\n"
-        << "command=" << command << "\n"
-        << std::endl;
+    std::cout << "[LOCAL_REMOVE_BACKGROUND_START]\n"
+              << "input=" << input_file.string() << "\n"
+              << "output=" << output_file.string() << "\n"
+              << "mode=" << mode << "\n"
+              << std::endl;
 
-    const int result =
-        std::system(command.c_str());
+    const int result = std::system(command.c_str());
 
     if (
         result != 0 ||
         !fs::exists(output_file) ||
         fs::file_size(output_file) == 0
     ) {
-        std::cout
-            << "[LOCAL_REMOVE_BACKGROUND_FAILED]\n"
-            << "result=" << result << "\n"
-            << std::endl;
-
+        std::cout << "[LOCAL_REMOVE_BACKGROUND_FAILED]\n"
+                  << "result=" << result << "\n"
+                  << std::endl;
         return std::nullopt;
     }
 
-    const std::string public_url =
-        output_service_.GetPublicUrl(output_name);
+    return output_service_.GetPublicUrl(output_name);
+}
 
-    std::cout
-        << "[LOCAL_REMOVE_BACKGROUND_OK]\n"
-        << "url=" << public_url << "\n"
-        << std::endl;
+std::optional<std::string> LocalToolRunner::RunRemoveObjects(
+    const std::string& task_id,
+    const std::string& input_file_name,
+    const json::object& request
+) {
+    const fs::path input_file = backend_input_dir_ / input_file_name;
 
-    return public_url;
+    if (!fs::exists(input_file)) {
+        std::cout << "[LOCAL_REMOVE_OBJECTS_INPUT_MISSING]\n"
+                  << "file=" << input_file.string() << "\n"
+                  << std::endl;
+        return std::nullopt;
+    }
+
+    std::string object_text = ReadStringOrEmpty(request, "prompt");
+
+    if (object_text.empty()) {
+        object_text = ReadOptionString(request, "objectText");
+    }
+
+    if (object_text.empty()) {
+        object_text = ReadOptionString(request, "removeText");
+    }
+
+    if (object_text.empty()) {
+        std::cout << "[LOCAL_REMOVE_OBJECTS_EMPTY_PROMPT]\n" << std::endl;
+        return std::nullopt;
+    }
+
+    const std::string output_name =
+        "pixo_remove_objects_" + task_id + ".png";
+
+    const fs::path output_file =
+        output_service_.GetFilePath(output_name);
+
+    const std::string command =
+        "cd \"" + project_root_.string() + "\" && "
+        ".venv-tools/bin/python3 scripts/remove_objects.py "
+        "\"" + input_file.string() + "\" "
+        "\"" + output_file.string() + "\" "
+        "\"" + object_text + "\" "
+        "0.35";
+
+    std::cout << "[LOCAL_REMOVE_OBJECTS_START]\n"
+              << "input=" << input_file.string() << "\n"
+              << "output=" << output_file.string() << "\n"
+              << "objectText=" << object_text << "\n"
+              << std::endl;
+
+    const int result = std::system(command.c_str());
+
+    if (
+        result != 0 ||
+        !fs::exists(output_file) ||
+        fs::file_size(output_file) == 0
+    ) {
+        std::cout << "[LOCAL_REMOVE_OBJECTS_FAILED]\n"
+                  << "result=" << result << "\n"
+                  << std::endl;
+        return std::nullopt;
+    }
+
+    return output_service_.GetPublicUrl(output_name);
 }
 
 }  // namespace local_tools
