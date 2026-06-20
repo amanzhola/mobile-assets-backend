@@ -1,8 +1,8 @@
-# 🧰 feature/local-tool-runner
+# 🧽 feature/remove-objects-auto-mask
 
-| Branch                      | Parent                           | Goal                                             | Main Result                                                             | Local Tool        | ComfyUI                        | AI Enhancer | Tools SDXL | Templates | Android            | Back                                                                                  |
-| --------------------------- | -------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------- | ----------------- | ------------------------------ | ----------- | ---------- | --------- | ------------------ | ------------------------------------------------------------------------------------- |
-| `feature/local-tool-runner` | `feature/templates-sdxl-actions` | вынести локальные инструменты в отдельный runner | `remove_background` больше не живёт внутри большого `GenerationService` | `LocalToolRunner` | не нужен для remove background | unchanged   | unchanged  | unchanged | No Android changes | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
+| Branch                             | Parent                      | Goal                                            | Main Result                                                 | Local Tool        | Mask             | Inpaint          | ComfyUI  | Android            | Back                                                                                  |
+| ---------------------------------- | --------------------------- | ----------------------------------------------- | ----------------------------------------------------------- | ----------------- | ---------------- | ---------------- | -------- | ------------------ | ------------------------------------------------------------------------------------- |
+| `feature/remove-objects-auto-mask` | `feature/local-tool-runner` | сделать честный Remove Objects без ручной маски | `prompt → CLIPSeg mask → OpenCV CPU inpaint → /outputs/...` | `LocalToolRunner` | auto text-guided | CPU OpenCV TELEA | not used | No Android changes | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
 
 ---
 
@@ -10,25 +10,18 @@
 
 ```text
 mobile-assets-backend/
+├── scripts/
+│   ├── remove_background.py
+│   └── remove_objects.py
 ├── src/
 │   ├── local_tools/
 │   │   ├── local_tool_runner.h
 │   │   └── local_tool_runner.cpp
-│   ├── generation_service.h
 │   ├── generation_service.cpp
-│   ├── output_service.h
-│   ├── output_service.cpp
-│   └── main.cpp
-├── scripts/
-│   └── remove_background.py
+│   └── generation_service.h
 ├── storage/
 │   ├── input/
 │   └── output/
-├── workflows/
-│   ├── ai_enhancer.json
-│   ├── tool_img2img.json
-│   └── template_img2img.json
-├── CMakeLists.txt
 └── README.md
 ```
 
@@ -36,195 +29,224 @@ mobile-assets-backend/
 
 ## ✅ What was done
 
-| #  | Area               | Before                                             | After                                   | Result                         |
-| -- | ------------------ | -------------------------------------------------- | --------------------------------------- | ------------------------------ |
-| 1  | Remove Background  | logic lived inside `GenerationService`             | logic moved to `LocalToolRunner`        | cleaner architecture           |
-| 2  | Local tools        | no dedicated local tool layer                      | added `src/local_tools/`                | future local tools have a home |
-| 3  | Background removal | direct block inside generation flow                | `RunRemoveBackground()` method          | reusable runner method         |
-| 4  | White mode         | handled in mixed generation code                   | handled by local runner + Python script | stable white background        |
-| 5  | Transparent mode   | handled in mixed generation code                   | handled by local runner + Python script | stable RGBA alpha PNG          |
-| 6  | ComfyUI dependency | remove background could be mixed with SDXL logic   | remove background does not use ComfyUI  | correct tool behavior          |
-| 7  | Android options    | needed `backgroundType` / `backgroundMode` support | runner reads both                       | Android-compatible             |
-| 8  | Output URL         | generated manually inside generation logic         | generated via `OutputService`           | consistent `/outputs/...`      |
-| 9  | Project root       | unsafe path from current dir                       | fixed `root` from `main.cpp`            | stable command path            |
-| 10 | Include path       | wrong include from nested folder                   | `#include "../output_service.h"`        | build fixed                    |
+| #  | Area            | Before                              | After                                 | Result                         |
+| -- | --------------- | ----------------------------------- | ------------------------------------- | ------------------------------ |
+| 1  | Remove Objects  | fake SDXL/tool prompt behavior risk | local text-guided object removal      | honest implementation          |
+| 2  | Mask            | Android user did not draw mask      | backend builds mask automatically     | no Android mask UI needed      |
+| 3  | Segmentation    | no object mask                      | CLIPSeg `text + image → mask`         | prompt-guided mask             |
+| 4  | Inpaint         | planned LaMa/FLUX idea              | CPU OpenCV `cv2.inpaint`              | stable WSL execution           |
+| 5  | Russian prompt  | `зонтик` failed                     | RU→EN normalization                   | common Russian words work      |
+| 6  | CUDA issue      | `SimpleLama()` tried CUDA           | removed LaMa dependency path          | works without NVIDIA           |
+| 7  | LocalToolRunner | only `RunRemoveBackground()`        | added `RunRemoveObjects()`            | local tools architecture grows |
+| 8  | Output          | no local remove object result       | `/outputs/pixo_remove_objects_...png` | Android Result works           |
+| 9  | Debug           | no mask artifact                    | saves debug mask as `*_mask.png`      | easier diagnosis               |
+| 10 | ComfyUI         | not needed for this tool            | bypassed                              | faster and simpler             |
 
 ---
 
-## 🧱 Main files
+## 🔁 Remove Objects pipeline
 
-| File                                    | Purpose                                                        |
-| --------------------------------------- | -------------------------------------------------------------- |
-| `src/local_tools/local_tool_runner.h`   | declares `LocalToolRunner`                                     |
-| `src/local_tools/local_tool_runner.cpp` | implements local remove background execution                   |
-| `src/generation_service.h`              | receives `LocalToolRunner&`                                    |
-| `src/generation_service.cpp`            | delegates `remove_background` to local runner                  |
-| `src/main.cpp`                          | creates `LocalToolRunner` and passes it to `GenerationService` |
-| `CMakeLists.txt`                        | adds `src/local_tools/local_tool_runner.cpp`                   |
-| `scripts/remove_background.py`          | actual `rembg + Pillow` implementation                         |
-
----
-
-## 🔁 Remove Background flow
-
-| Step | Component         | Action                                           | Result                                   |
-| ---- | ----------------- | ------------------------------------------------ | ---------------------------------------- |
-| 1    | Android           | sends `serverAction=remove_background`           | backend task created                     |
-| 2    | GenerationService | extracts uploaded file name                      | input file known                         |
-| 3    | GenerationService | calls `local_tool_runner_.RunRemoveBackground()` | local path begins                        |
-| 4    | LocalToolRunner   | reads `backgroundType` or `backgroundMode`       | `white` or `transparent`                 |
-| 5    | LocalToolRunner   | runs `scripts/remove_background.py`              | PNG output created                       |
-| 6    | OutputService     | builds public URL                                | `/outputs/pixo_remove_background_...png` |
-| 7    | GenerationService | duplicates output if `outputCount > 1`           | result array filled                      |
-| 8    | Android           | receives completed result                        | Result Screen shows image                |
+| Step | Component         | Action                                         | Result                                |
+| ---- | ----------------- | ---------------------------------------------- | ------------------------------------- |
+| 1    | Android           | sends `serverAction=remove_objects` + `prompt` | backend receives request              |
+| 2    | GenerationService | extracts first uploaded file                   | input filename                        |
+| 3    | GenerationService | calls `local_tool_runner_.RunRemoveObjects()`  | local tool path                       |
+| 4    | LocalToolRunner   | reads `prompt`, `objectText`, or `removeText`  | object text                           |
+| 5    | Python script     | CLIPSeg builds object mask                     | grayscale mask                        |
+| 6    | Python script     | expands/blurs/thresholds mask                  | usable inpaint mask                   |
+| 7    | Python script     | OpenCV TELEA inpaint                           | object removed                        |
+| 8    | OutputService     | builds public URL                              | `/outputs/pixo_remove_objects_...png` |
+| 9    | Android           | polls task                                     | completed result                      |
 
 ---
 
-## 🧼 Supported modes
+## 🧠 Why not FLUX Fill yet
 
-| Mode          | Android option                                               | Script mode   | Output                           |
-| ------------- | ------------------------------------------------------------ | ------------- | -------------------------------- |
-| white         | `backgroundType=white` or `backgroundMode=white`             | `white`       | subject on pure white background |
-| transparent   | `backgroundType=transparent` or `backgroundMode=transparent` | `transparent` | RGBA PNG with alpha              |
-| empty/unknown | missing or other value                                       | `white`       | safe visible white result        |
+| Point                      | Explanation                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| FLUX Fill needs mask       | inpainting/outpainting still needs an edited region                               |
+| Android does not draw mask | backend must generate mask automatically first                                    |
+| First working approach     | CLIPSeg text mask + CPU inpaint                                                   |
+| Future upgrade             | replace CPU OpenCV with FLUX Fill / LaMa / ComfyUI inpaint after mask is reliable |
 
 ---
 
 ## 🧩 LocalToolRunner API
 
-| Method                  | Input                                      | Output                     | Purpose                                                  |
-| ----------------------- | ------------------------------------------ | -------------------------- | -------------------------------------------------------- |
-| `RunRemoveBackground()` | `task_id`, `input_file_name`, request JSON | optional public output URL | execute local remove background                          |
-| `ReadOptionString()`    | request JSON + key                         | string                     | read `options.backgroundType` / `options.backgroundMode` |
+| Method                  | Purpose                                     |
+| ----------------------- | ------------------------------------------- |
+| `RunRemoveBackground()` | local `rembg` background removal            |
+| `RunRemoveObjects()`    | local CLIPSeg + OpenCV object removal       |
+| `ReadOptionString()`    | read values from `options`                  |
+| `ReadStringOrEmpty()`   | read top-level request string like `prompt` |
 
 ---
 
-## ⚙️ Integration points
+## 🗣 Prompt sources
 
-| Place                           | Change                                                                              |
-| ------------------------------- | ----------------------------------------------------------------------------------- |
-| `generation_service.h`          | include `local_tools/local_tool_runner.h`                                           |
-| `GenerationService` constructor | add `local_tools::LocalToolRunner& local_tool_runner`                               |
-| `GenerationService` fields      | add `local_tools::LocalToolRunner& local_tool_runner_`                              |
-| `generation_service.cpp`        | replace big `remove_background` block with local runner call                        |
-| `main.cpp`                      | create `backend_input_dir`, create `LocalToolRunner`, pass into `GenerationService` |
-| `CMakeLists.txt`                | add `src/local_tools/local_tool_runner.cpp`                                         |
+| Priority | Field                | Example               |
+| -------- | -------------------- | --------------------- |
+| 1        | `prompt`             | `umbrella`            |
+| 2        | `options.objectText` | `person in red shirt` |
+| 3        | `options.removeText` | `logo`                |
 
 ---
 
-## 🛠 Build fixes
+## 🌍 Russian → English normalization
 
-| Problem                       | Symptom                                       | Fix                                                                 |
-| ----------------------------- | --------------------------------------------- | ------------------------------------------------------------------- |
-| wrong include path            | `output_service.h: No such file or directory` | use `#include "../output_service.h"`                                |
-| missing input dir variable    | `backend_input_dir was not declared`          | define `const fs::path backend_input_dir = root / "storage/input";` |
-| unsafe project root           | command path could break from different cwd   | pass `root` into `LocalToolRunner`                                  |
-| UploadService duplicated path | separate hardcoded path                       | use `backend_input_dir` for upload service too                      |
-| GenerationService input path  | repeated `root / "storage/input"`             | pass `backend_input_dir`                                            |
+| Russian        | English     |
+| -------------- | ----------- |
+| `зонтик`       | `umbrella`  |
+| `зонт`         | `umbrella`  |
+| `человек`      | `person`    |
+| `люди`         | `people`    |
+| `машина`       | `car`       |
+| `авто`         | `car`       |
+| `водяной знак` | `watermark` |
+| `логотип`      | `logo`      |
+| `текст`        | `text`      |
+| `провод`       | `wire`      |
+| `провода`      | `wires`     |
+| `мусор`        | `trash`     |
+| `сумка`        | `bag`       |
+| `стул`         | `chair`     |
+| `стол`         | `table`     |
 
 ---
 
-## 🧪 Test commands
+## 📂 Main files
 
-| Test                     | Expected                                                              |
-| ------------------------ | --------------------------------------------------------------------- |
-| white background request | `/outputs/pixo_remove_background_...png` with white background        |
-| transparent request      | `/outputs/pixo_remove_background_...png` with alpha                   |
-| backend build            | `cmake --build .` succeeds                                            |
-| logs                     | `[LOCAL_REMOVE_BACKGROUND_START]` then `[LOCAL_REMOVE_BACKGROUND_OK]` |
+| File                                    | Purpose                                             |
+| --------------------------------------- | --------------------------------------------------- |
+| `scripts/remove_objects.py`             | CLIPSeg mask + OpenCV CPU inpaint                   |
+| `src/local_tools/local_tool_runner.h`   | adds `RunRemoveObjects()` declaration               |
+| `src/local_tools/local_tool_runner.cpp` | runs remove objects script and returns output URL   |
+| `src/generation_service.cpp`            | adds `server_action == "remove_objects"` local path |
+| `.venv-tools/`                          | Python environment with ML dependencies             |
+
+---
+
+## 🐍 Python dependencies
+
+| Package                  | Purpose                                                |
+| ------------------------ | ------------------------------------------------------ |
+| `transformers`           | CLIPSeg model loading                                  |
+| `torch`                  | model inference                                        |
+| `torchvision`            | PyTorch vision support                                 |
+| `pillow`                 | image loading/saving/filtering                         |
+| `numpy`                  | mask array processing                                  |
+| `opencv-python`          | CPU inpainting                                         |
+| `simple-lama-inpainting` | attempted earlier, but CPU-safe final path uses OpenCV |
+
+---
+
+## 🧪 Direct script test
 
 ```bash
-cd ~/mobile-assets-backend/build
-cmake --build .
+source ~/mobile-assets-backend/.venv-tools/bin/activate
+
+python3 scripts/remove_objects.py \
+  storage/input/img_9504081960506_360b977a04f31f9a.jpg \
+  /tmp/remove_objects_test.png \
+  "зонтик" \
+  0.20
+
+file /tmp/remove_objects_test.png
+file /tmp/remove_objects_test_mask.png
 ```
 
-```bash
-PUBLIC_BASE_URL="http://192.168.0.177:8080" \
-COMFY_BASE_URL="https://YOUR-COMFY.trycloudflare.com" \
-./bin/mobile_assets_backend
-```
-
 ---
 
-## 🧪 White test
+## 🧪 Backend test
 
 ```bash
-curl -s -X POST http://localhost:8080/generations \
+RESPONSE=$(curl -s -X POST http://localhost:8080/generations \
 -H "Content-Type: application/json" \
 -d '{
-  "serverAction":"remove_background",
-  "toolType":"REMOVE_BACKGROUND",
-  "sourceImageUrl":"http://192.168.0.177:8080/uploads/img_3134512171482_49c5b060e98f6d76.jpg",
-  "options":{"backgroundType":"white"},
+  "serverAction":"remove_objects",
+  "toolType":"REMOVE_OBJECTS",
+  "sourceImageUrl":"http://192.168.0.177:8080/uploads/img_9504081960506_360b977a04f31f9a.jpg",
+  "prompt":"зонтик",
   "outputCount":1
-}' | jq
+}')
+
+echo "$RESPONSE" | jq
+
+TASK_ID=$(echo "$RESPONSE" | jq -r '.taskId')
+
+watch -n 3 "curl -s http://localhost:8080/generations/$TASK_ID | jq"
 ```
 
 ---
 
-## 🧪 Transparent test
+## ✅ Expected response
 
-```bash
-curl -s -X POST http://localhost:8080/generations \
--H "Content-Type: application/json" \
--d '{
-  "serverAction":"remove_background",
-  "toolType":"REMOVE_BACKGROUND",
-  "sourceImageUrl":"http://192.168.0.177:8080/uploads/img_3134512171482_49c5b060e98f6d76.jpg",
-  "options":{"backgroundType":"transparent"},
-  "outputCount":1
-}' | jq
-```
+| Field                | Expected                                                        |
+| -------------------- | --------------------------------------------------------------- |
+| `status`             | `completed`                                                     |
+| `progressPercent`    | `100`                                                           |
+| `resultImageUrls[0]` | `http://192.168.0.177:8080/outputs/pixo_remove_objects_....png` |
 
 ---
 
-## ⚠️ What is NOT faked
+## 🧨 Problems fixed
 
-| Tool                | Why not implemented here                                      |
-| ------------------- | ------------------------------------------------------------- |
-| `remove_objects`    | needs mask/inpainting workflow; without mask it would be fake |
-| `smile_edit`        | needs face/expression model; simple prompt is not honest      |
-| `hair_studio` local | needs segmentation/face/hair model                            |
-| local SDXL tools    | still handled by ComfyUI workflows                            |
+| Problem                 | Cause                                             | Fix                                  |
+| ----------------------- | ------------------------------------------------- | ------------------------------------ |
+| `зонтик` failed         | CLIPSeg prompt needed English                     | RU→EN dictionary                     |
+| `SimpleLama()` failed   | attempted CUDA on WSL without NVIDIA              | replaced with OpenCV CPU inpaint     |
+| empty mask              | CLIPSeg score too weak                            | normalized logits + lower threshold  |
+| weak mask edges         | raw mask too small                                | MaxFilter + GaussianBlur + threshold |
+| hard diagnosis          | no mask saved                                     | output debug `*_mask.png`            |
+| fake remove object risk | SDXL prompt alone does not remove target reliably | mask-driven inpaint path             |
 
 ---
 
-## 🔜 Next honest stage
+## ⚠️ Known limitations
 
-| Next feature          | Requirement                                           |
-| --------------------- | ----------------------------------------------------- |
-| real `remove_objects` | user mask or auto mask + inpainting workflow          |
-| real `smile_edit`     | face expression model or specialized ComfyUI workflow |
-| better local tools    | separate local runners per tool                       |
-| queue worker          | local tools and ComfyUI jobs can share task lifecycle |
+| Limitation                    | Meaning                             | Future fix                                |
+| ----------------------------- | ----------------------------------- | ----------------------------------------- |
+| CLIPSeg mask may be imperfect | object text may select wrong region | better segmentation / SAM                 |
+| OpenCV inpaint is basic       | texture may be rough                | LaMa / FLUX Fill / ComfyUI inpaint        |
+| no manual mask                | user cannot refine selection        | add mask UI later                         |
+| no multi-object UI yet        | prompt can describe one/few objects | add better prompt parser                  |
+| no FLUX Fill yet              | inpaint model not connected         | use auto mask as input to FLUX Fill later |
+
+---
+
+## 🔜 Next stage
+
+| Branch idea                         | Goal                                                |
+| ----------------------------------- | --------------------------------------------------- |
+| `feature/remove-objects-flux-fill`  | use auto mask with FLUX Fill / ComfyUI inpainting   |
+| `feature/remove-objects-sam-mask`   | replace CLIPSeg mask with SAM/grounded segmentation |
+| `feature/local-tool-runner-cleanup` | split local tools into separate runners             |
 
 ---
 
 ## 🧾 Git
 
-| Step          | Command                                                  |
-| ------------- | -------------------------------------------------------- |
-| create branch | `git checkout -b feature/local-tool-runner`              |
-| status        | `git status`                                             |
-| add           | `git add .`                                              |
-| commit        | `git commit -m "Extract local remove background runner"` |
-| push          | `git push -u origin feature/local-tool-runner`           |
+| Step          | Command                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| create branch | `git checkout -b feature/remove-objects-auto-mask`                                                                                       |
+| add           | `git add scripts/remove_objects.py src/local_tools/local_tool_runner.cpp src/local_tools/local_tool_runner.h src/generation_service.cpp` |
+| commit        | `git commit -m "Add CPU text-guided remove objects runner"`                                                                              |
+| push          | `git push -u origin feature/remove-objects-auto-mask`                                                                                    |
 
 ---
 
 ## 🏁 Final result
 
-| Capability                                             | Status |
-| ------------------------------------------------------ | ------ |
-| `LocalToolRunner` added                                | ✅      |
-| `remove_background` extracted from `GenerationService` | ✅      |
-| direct `rembg` path preserved                          | ✅      |
-| white mode works                                       | ✅      |
-| transparent mode works                                 | ✅      |
-| Android request format supported                       | ✅      |
-| ComfyUI not used for remove background                 | ✅      |
-| architecture ready for future local tools              | ✅      |
-| fake Remove Objects / Smile not added                  | ✅      |
+| Capability                                        | Status |
+| ------------------------------------------------- | ------ |
+| Remove Objects works without Android mask drawing | ✅      |
+| Backend creates auto mask from text               | ✅      |
+| Russian common prompts normalized                 | ✅      |
+| CPU inpaint works in WSL                          | ✅      |
+| ComfyUI not required for this tool                | ✅      |
+| Output saved to `/outputs/...`                    | ✅      |
+| Android receives completed task                   | ✅      |
+| Honest non-fake remove objects path               | ✅      |
 
 ---
 
