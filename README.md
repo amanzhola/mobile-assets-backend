@@ -25,6 +25,7 @@ Backend для AI-генерации изображений, шаблонов, u
 | `feature/tools-sdxl-actions`       | SDXL actions для Tools          | общий `tool_img2img.json`, 10 tool actions через ComfyUI SDXL img2img, AI Enhancer отдельно | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/tools-sdxl-actions/README.md) |
 | `feature/templates-sdxl-actions`   | SDXL generation для Templates   | 24 templates через `template_img2img.json`, user image участвует в композиции, template background + transparent subject + SDXL blending | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/templates-sdxl-actions/README.md) |
 | `feature/local-tool-runner`        | Локальный runner > backend tools| вынесен `remove_background` в `LocalToolRunner`, прямой `rembg` flow без ComfyUI/SDXL, подготовлена архитектура для честных локальных tools | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/local-tool-runner/README.md) |
+| `feature/remove-objects-auto-mask` | Remove Objects без ручной mask  | backend сам строит mask по prompt через CLIPSeg и удаляет объект через CPU OpenCV inpaint, без ComfyUI/SDXL и без Android mask drawing | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/remove-objects-auto-mask/README.md) |
 
 ---
 
