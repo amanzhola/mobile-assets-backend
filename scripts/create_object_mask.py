@@ -82,8 +82,8 @@ mask_np = np.array(mask)
 mask_np = (mask_np > int(threshold * 255)).astype(np.uint8) * 255
 
 mask_img = Image.fromarray(mask_np, mode="L")
-mask_img = mask_img.filter(ImageFilter.MaxFilter(13))
-mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=4))
+mask_img = mask_img.filter(ImageFilter.MaxFilter(5))
+mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=2))
 mask_img = mask_img.point(lambda p: 255 if p > 20 else 0)
 
 mask_np = np.array(mask_img)
