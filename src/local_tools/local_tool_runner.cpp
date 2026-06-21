@@ -159,12 +159,13 @@ std::optional<std::string> LocalToolRunner::CreateRemoveObjectsMask(
         backend_input_dir_ / mask_file_name;
 
     const std::string command =
-        "cd \"" + project_root_.string() + "\" && "
-        ".venv-tools/bin/python3 scripts/create_object_mask.py "
-        "\"" + input_file.string() + "\" "
-        "\"" + mask_file.string() + "\" "
-        "\"" + object_text + "\" "
-        "0.45";
+	    "cd \"" + project_root_.string() + "\" && "
+	    ".venv-tools/bin/python3 scripts/create_object_mask_sam.py "
+	    "\"" + input_file.string() + "\" "
+	    "\"" + mask_file.string() + "\" "
+	    "\"" + object_text + "\" "
+	    "0.32 "
+	    "0.25";
 
     std::cout
         << "[REMOVE_OBJECTS_MASK_START]\n"

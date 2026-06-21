@@ -32,7 +32,7 @@
       "pixels": ["1", 0],
       "vae": ["3", 2],
       "mask": ["2", 1],
-      "grow_mask_by": 12
+      "grow_mask_by": 2
     },
     "_meta": {
       "title": "Encode For Inpaint"
@@ -62,8 +62,8 @@
     "class_type": "KSampler",
     "inputs": {
       "seed": "{{seed}}",
-      "steps": 10,
-      "cfg": 2.2,
+      "steps": 12,
+      "cfg": 1.8,
       "sampler_name": "euler",
       "scheduler": "sgm_uniform",
       "denoise": "{{denoise}}",

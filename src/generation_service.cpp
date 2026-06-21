@@ -414,7 +414,7 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
 		        ReadStringOrEmpty(request, "prompt");
 		
 		    const std::string positive_prompt =
-    "remove only the selected object, fill the removed area by matching the surrounding pixels, same colors, same lighting, same texture, preserve the person, preserve head, preserve face, realistic photo";
+    "remove only the selected masked object, fill the removed area by matching the surrounding pixels, same colors, same lighting, same texture, seamless realistic photo";
 			
 			workflow =
 			    workflow_builder_.BuildRemoveObjectsInpaintWorkflow(
@@ -422,7 +422,7 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
 			        *mask_file_name,
 			        output_prefix,
 			        positive_prompt,
-			        0.55
+			        0.48
 			    );
 
         } else if (IsToolAction(server_action)) {
@@ -567,6 +567,52 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
                 return std::nullopt;
             }
         }
+        
+        if (server_action == "remove_objects") {
+		    const fs::path mask_file =
+		        backend_input_dir_ /
+		        ("mask_remove_objects_" + task_id + "_" + std::to_string(image_index) + ".png");
+		
+		    const fs::path composited_file =
+		        comfy_output_dir_ /
+		        ("final_" + *comfy_output_file_name);
+		
+		    const std::string command =
+		        "cd /home/ubuntu/mobile-assets-backend && "
+		        ".venv-tools/bin/python3 scripts/apply_inpaint_mask.py "
+		        "\"" + backend_input_file.string() + "\" "
+		        "\"" + local_comfy_output_file.string() + "\" "
+		        "\"" + mask_file.string() + "\" "
+		        "\"" + composited_file.string() + "\"";
+		
+		    std::cout
+		        << "[REMOVE_OBJECTS_POST_COMPOSITE_START]\n"
+		        << "command=" << command << "\n"
+		        << std::endl;
+		
+		    const int composite_result =
+		        std::system(command.c_str());
+		
+		    if (
+		        composite_result == 0 &&
+		        fs::exists(composited_file) &&
+		        fs::file_size(composited_file) > 0
+		    ) {
+		        source_output_file = composited_file;
+		
+		        std::cout
+		            << "[REMOVE_OBJECTS_POST_COMPOSITE_OK]\n"
+		            << "file=" << composited_file.string() << "\n"
+		            << std::endl;
+		    } else {
+		        std::cout
+		            << "[REMOVE_OBJECTS_POST_COMPOSITE_FAILED]\n"
+		            << "result=" << composite_result << "\n"
+		            << std::endl;
+		
+		        return std::nullopt;
+		    }
+		}
 
         UpdateTaskProgress(task_id, 92);
 
