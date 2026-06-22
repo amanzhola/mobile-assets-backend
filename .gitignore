@@ -19,3 +19,4 @@ storage/**
 .vscode/
 .idea/
 .venv-tools/
+models/local/*.pth
