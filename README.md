@@ -27,6 +27,7 @@ Backend для AI-генерации изображений, шаблонов, u
 | `feature/local-tool-runner`        | Локальный runner > backend tools| вынесен `remove_background` в `LocalToolRunner`, прямой `rembg` flow без ComfyUI/SDXL, подготовлена архитектура для честных локальных tools | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/local-tool-runner/README.md) |
 | `feature/remove-objects-auto-mask` | Remove Objects без ручной mask  | backend сам строит mask по prompt через CLIPSeg и удаляет объект через CPU OpenCV inpaint, без ComfyUI/SDXL и без Android mask drawing | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/remove-objects-auto-mask/README.md) |
 | `feature/remove-objects-sam2-flux-fill` | Remove Objects через SAM + ComfyUI inpaint | GroundingDINO/SAM mask generation, ComfyUI inpaint, post-composite original outside mask, лучший текущий auto remove objects backend | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/remove-objects-sam2-flux-fill/README.md) |
+| `feature/remove-objects-manual-mask`| Manual cleanup для Remove Objects | второй проход удаления объектов через Android brush mask, `remove_objects_cleanup`, `prepare_manual_cleanup_mask.py`, ComfyUI inpaint и post-composite только по выделенной области | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/remove-objects-manual-mask/README.md) |
 
 ---
 
