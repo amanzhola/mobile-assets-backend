@@ -76,6 +76,14 @@ GenerationService::GenerationService(
 	    output_service_,
 	    template_asset_service_
 	}
+	, tool_action_runner_{
+	    backend_input_dir_,
+	    comfy_input_dir_,
+	    comfy_output_dir_,
+	    comfy_client_,
+	    workflow_builder_,
+	    output_service_
+	}
     , remove_objects_cleanup_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -323,41 +331,6 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
             << std::endl;
 
         json::object workflow;
-
-        if (IsToolAction(server_action)) {
-            std::cout
-                << "[BUILD_WORKFLOW]\n"
-                << "type=tool\n"
-                << std::endl;
-
-            const std::string positive_prompt = BuildToolPositivePrompt(
-                request,
-                server_action,
-                ReadStringOrEmpty(request, "prompt")
-            );
-
-            const double denoise = ResolveToolDenoise(server_action);
-
-            workflow = workflow_builder_.BuildToolWorkflow(
-                input_file_name,
-                output_prefix,
-                positive_prompt,
-                denoise
-            );
-
-        } else {
-            std::cout
-                << "[BUILD_WORKFLOW]\n"
-                << "type=default\n"
-                << std::endl;
-
-            workflow = workflow_builder_.BuildWorkflow(
-                server_action,
-                input_file_name,
-                output_prefix,
-                enhance_mode
-            );
-        }
 
         std::cout
             << "[COMFY_WORKFLOW_JSON]\n"
@@ -692,6 +665,45 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	    auto output_url =
 	        template_runner_.Run(
 	            template_id,
+	            input_file_names.front(),
+	            task_id,
+	            0,
+	            [this, &task_id](int progress)
+	            {
+	                UpdateTaskProgress(task_id, progress);
+	            }
+	        );
+	
+	    if (output_url) {
+	        result_urls.push_back(*output_url);
+	    }
+	
+	    while (
+	        !result_urls.empty() &&
+	        static_cast<int>(result_urls.size()) < output_count
+	    ) {
+	        result_urls.push_back(result_urls.front());
+	    }
+	
+	    return result_urls;
+	}
+	
+	if (IsToolAction(server_action)) {
+	    UpdateTaskProgress(task_id, 1);
+	
+	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+	
+	    const std::vector<std::string> input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    auto output_url =
+	        tool_action_runner_.Run(
+	            request,
+	            server_action,
 	            input_file_names.front(),
 	            task_id,
 	            0,
