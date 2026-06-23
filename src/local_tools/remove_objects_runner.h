@@ -1,35 +1,38 @@
 #pragma once
 
-#include "../output_service.h"
 #include "../comfy/comfy_client.h"
 #include "../comfy/workflow_builder.h"
+#include "../output_service.h"
+#include "local_tool_runner.h"
 
 #include <boost/json.hpp>
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
-#include <functional>
 
 namespace local_tools {
 
 namespace json = boost::json;
 namespace fs = std::filesystem;
 
-class RemoveObjectsCleanupRunner {
+class RemoveObjectsRunner {
 public:
-    RemoveObjectsCleanupRunner(
+    RemoveObjectsRunner(
         fs::path project_root,
         fs::path backend_input_dir,
         fs::path comfy_input_dir,
         fs::path comfy_output_dir,
         comfy::ComfyClient& comfy_client,
         comfy::WorkflowBuilder& workflow_builder,
-        output::OutputService& output_service
+        output::OutputService& output_service,
+        LocalToolRunner& local_tool_runner
     );
 
     std::optional<std::string> Run(
         const json::object& request,
+        const std::string& input_file_name,
         const std::string& task_id,
         int image_index,
         const std::function<void(int)>& update_progress
@@ -49,6 +52,7 @@ private:
     comfy::ComfyClient& comfy_client_;
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
+    LocalToolRunner& local_tool_runner_;
 };
 
 }  // namespace local_tools

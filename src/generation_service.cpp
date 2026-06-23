@@ -48,6 +48,16 @@ GenerationService::GenerationService(
         backend_input_dir_,
         output_service_
     }
+    , remove_objects_runner_{
+        fs::path{"/home/ubuntu/mobile-assets-backend"},
+        backend_input_dir_,
+        comfy_input_dir_,
+        comfy_output_dir_,
+        comfy_client_,
+        workflow_builder_,
+        output_service_,
+        local_tool_runner_
+    }
     , remove_objects_cleanup_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -394,57 +404,7 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
 		
 		    workflow = std::move(template_workflow->workflow);
 		    
-		} else if (server_action == "remove_objects") {
-		    auto mask_file_name =
-		        local_tool_runner_.CreateRemoveObjectsMask(
-		            task_id,
-		            image_index,
-		            input_file_name,
-		            request
-		        );
-		
-		    if (!mask_file_name) {
-		        return std::nullopt;
-		    }
-		
-		    const fs::path backend_mask_file =
-		        backend_input_dir_ / *mask_file_name;
-		
-		    const fs::path comfy_mask_file =
-		        comfy_input_dir_ / *mask_file_name;
-		
-		    fs::copy_file(
-		        backend_mask_file,
-		        comfy_mask_file,
-		        fs::copy_options::overwrite_existing
-		    );
-		
-		    const bool mask_uploaded =
-		        comfy_client_.UploadImage(
-		            backend_mask_file,
-		            *mask_file_name
-		        );
-		
-		    if (!mask_uploaded) {
-		        return std::nullopt;
-		    }
-		
-		    const std::string object_text =
-		        ReadStringOrEmpty(request, "prompt");
-		
-		    const std::string positive_prompt =
-    "remove only the selected masked object, fill the removed area by matching the surrounding pixels, same colors, same lighting, same texture, seamless realistic photo";
-			
-			workflow =
-			    workflow_builder_.BuildRemoveObjectsInpaintWorkflow(
-			        input_file_name,
-			        *mask_file_name,
-			        output_prefix,
-			        positive_prompt,
-			        0.48
-			    );
-
-        } else if (IsToolAction(server_action)) {
+		} else if (IsToolAction(server_action)) {
             std::cout
                 << "[BUILD_WORKFLOW]\n"
                 << "type=tool\n"
@@ -586,52 +546,6 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
                 return std::nullopt;
             }
         }
-        
-        if (server_action == "remove_objects") {
-		    const fs::path mask_file =
-		        backend_input_dir_ /
-		        ("mask_remove_objects_" + task_id + "_" + std::to_string(image_index) + ".png");
-		
-		    const fs::path composited_file =
-		        comfy_output_dir_ /
-		        ("final_" + *comfy_output_file_name);
-		
-		    const std::string command =
-		        "cd /home/ubuntu/mobile-assets-backend && "
-		        ".venv-tools/bin/python3 scripts/apply_inpaint_mask.py "
-		        "\"" + backend_input_file.string() + "\" "
-		        "\"" + local_comfy_output_file.string() + "\" "
-		        "\"" + mask_file.string() + "\" "
-		        "\"" + composited_file.string() + "\"";
-		
-		    std::cout
-		        << "[REMOVE_OBJECTS_POST_COMPOSITE_START]\n"
-		        << "command=" << command << "\n"
-		        << std::endl;
-		
-		    const int composite_result =
-		        std::system(command.c_str());
-		
-		    if (
-		        composite_result == 0 &&
-		        fs::exists(composited_file) &&
-		        fs::file_size(composited_file) > 0
-		    ) {
-		        source_output_file = composited_file;
-		
-		        std::cout
-		            << "[REMOVE_OBJECTS_POST_COMPOSITE_OK]\n"
-		            << "file=" << composited_file.string() << "\n"
-		            << std::endl;
-		    } else {
-		        std::cout
-		            << "[REMOVE_OBJECTS_POST_COMPOSITE_FAILED]\n"
-		            << "result=" << composite_result << "\n"
-		            << std::endl;
-		
-		        return std::nullopt;
-		    }
-		}
 
         UpdateTaskProgress(task_id, 92);
 
@@ -691,7 +605,14 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 		    remove_objects_cleanup_runner_.Run(
 		        request,
 		        task_id,
-		        0
+		        0,
+		        [this, &task_id](int progress)
+		        {
+		            UpdateTaskProgress(
+		                task_id,
+		                progress
+		            );
+		        }
 		    );
 	
 	    if (output_url) {
@@ -751,6 +672,43 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	    }
 	
 	    UpdateTaskProgress(task_id, 100);
+	
+	    return result_urls;
+	}
+	
+	if (server_action == "remove_objects") {
+	    UpdateTaskProgress(task_id, 1);
+	
+	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+	
+	    const std::vector<std::string> input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    auto output_url =
+	        remove_objects_runner_.Run(
+	            request,
+	            input_file_names.front(),
+	            task_id,
+	            0,
+	            [this, &task_id](int progress) {
+	                UpdateTaskProgress(task_id, progress);
+	            }
+	        );
+	
+	    if (output_url) {
+	        result_urls.push_back(*output_url);
+	    }
+	
+	    while (
+	        !result_urls.empty() &&
+	        static_cast<int>(result_urls.size()) < output_count
+	    ) {
+	        result_urls.push_back(result_urls.front());
+	    }
 	
 	    return result_urls;
 	}
