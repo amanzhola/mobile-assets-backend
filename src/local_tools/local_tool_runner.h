@@ -21,18 +21,12 @@ public:
         output::OutputService& output_service
     );
 
-    std::optional<std::string> RunRemoveBackground(
+    std::optional<std::string> CreateRemoveObjectsMask(
         const std::string& task_id,
+        int image_index,
         const std::string& input_file_name,
         const json::object& request
     );
-    
-    std::optional<std::string> CreateRemoveObjectsMask(
-	    const std::string& task_id,
-	    int image_index,
-	    const std::string& input_file_name,
-	    const json::object& request
-	);
 
 private:
     std::string ReadOptionString(

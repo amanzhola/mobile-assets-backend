@@ -48,72 +48,6 @@ std::string LocalToolRunner::ReadStringOrEmpty(
     return std::string(it->value().as_string());
 }
 
-std::optional<std::string> LocalToolRunner::RunRemoveBackground(
-    const std::string& task_id,
-    const std::string& input_file_name,
-    const json::object& request
-) {
-    const fs::path input_file =
-        backend_input_dir_ / input_file_name;
-
-    if (!fs::exists(input_file)) {
-        std::cout
-            << "[LOCAL_REMOVE_BACKGROUND_INPUT_MISSING]\n"
-            << "file=" << input_file.string() << "\n"
-            << std::endl;
-
-        return std::nullopt;
-    }
-
-    std::string mode = ReadOptionString(request, "backgroundType");
-
-    if (mode.empty()) {
-        mode = ReadOptionString(request, "backgroundMode");
-    }
-
-    if (mode != "transparent") {
-        mode = "white";
-    }
-
-    const std::string output_name =
-        "pixo_remove_background_" + task_id + ".png";
-
-    const fs::path output_file =
-        output_service_.GetFilePath(output_name);
-
-    const std::string command =
-        "cd \"" + project_root_.string() + "\" && "
-        ".venv-tools/bin/python3 scripts/remove_background.py "
-        "\"" + input_file.string() + "\" "
-        "\"" + output_file.string() + "\" "
-        + mode;
-
-    std::cout
-        << "[LOCAL_REMOVE_BACKGROUND_START]\n"
-        << "input=" << input_file.string() << "\n"
-        << "output=" << output_file.string() << "\n"
-        << "mode=" << mode << "\n"
-        << std::endl;
-
-    const int result =
-        std::system(command.c_str());
-
-    if (
-        result != 0 ||
-        !fs::exists(output_file) ||
-        fs::file_size(output_file) == 0
-    ) {
-        std::cout
-            << "[LOCAL_REMOVE_BACKGROUND_FAILED]\n"
-            << "result=" << result << "\n"
-            << std::endl;
-
-        return std::nullopt;
-    }
-
-    return output_service_.GetPublicUrl(output_name);
-}
-
 std::optional<std::string> LocalToolRunner::CreateRemoveObjectsMask(
     const std::string& task_id,
     int image_index,
@@ -159,13 +93,13 @@ std::optional<std::string> LocalToolRunner::CreateRemoveObjectsMask(
         backend_input_dir_ / mask_file_name;
 
     const std::string command =
-	    "cd \"" + project_root_.string() + "\" && "
-	    ".venv-tools/bin/python3 scripts/create_object_mask_sam.py "
-	    "\"" + input_file.string() + "\" "
-	    "\"" + mask_file.string() + "\" "
-	    "\"" + object_text + "\" "
-	    "0.32 "
-	    "0.25";
+        "cd \"" + project_root_.string() + "\" && "
+        ".venv-tools/bin/python3 scripts/create_object_mask_sam.py "
+        "\"" + input_file.string() + "\" "
+        "\"" + mask_file.string() + "\" "
+        "\"" + object_text + "\" "
+        "0.32 "
+        "0.25";
 
     std::cout
         << "[REMOVE_OBJECTS_MASK_START]\n"
