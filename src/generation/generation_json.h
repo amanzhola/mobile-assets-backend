@@ -51,5 +51,9 @@ std::optional<std::string> ExtractFileNameFromUploadUrl(
     const std::string& raw_url
 );
 
+std::optional<std::string> ExtractFileNameFromOutputUrl(
+    const std::string& raw_url
+);
+
 }  // namespace generation
 

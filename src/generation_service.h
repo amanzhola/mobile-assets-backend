@@ -104,6 +104,12 @@ private:
         int image_index,
         const std::string& enhance_mode
     );
+    
+    std::optional<std::string> RunRemoveObjectsCleanupViaComfy(
+	    const json::object& request,
+	    const std::string& task_id,
+	    int image_index
+	);
 
     std::optional<std::string> FindNewestComfyOutputByPrefix(
         const std::string& output_prefix

@@ -169,4 +169,35 @@ std::optional<std::string> ExtractFileNameFromUploadUrl(
     return file_name;
 }
 
+std::optional<std::string> ExtractFileNameFromOutputUrl(
+    const std::string& raw_url
+) {
+    std::string url = raw_url;
+
+    const auto query_pos = url.find('?');
+
+    if (query_pos != std::string::npos) {
+        url = url.substr(0, query_pos);
+    }
+
+    const std::string marker = "/outputs/";
+    const auto marker_pos = url.find(marker);
+
+    if (marker_pos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    std::string file_name = url.substr(marker_pos + marker.size());
+
+    if (
+        file_name.empty() ||
+        file_name.find('/') != std::string::npos ||
+        file_name.find('\\') != std::string::npos
+    ) {
+        return std::nullopt;
+    }
+
+    return file_name;
+}
+
 }  // namespace generation
