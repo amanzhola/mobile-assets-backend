@@ -42,7 +42,21 @@ GenerationService::GenerationService(
     , local_tool_runner_{local_tool_runner}
     , backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
-    , comfy_output_dir_{std::move(comfy_output_dir)} {
+    , comfy_output_dir_{std::move(comfy_output_dir)}
+    , remove_background_runner_{
+        fs::path{"/home/ubuntu/mobile-assets-backend"},
+        backend_input_dir_,
+        output_service_
+    }
+    , remove_objects_cleanup_runner_{
+        fs::path{"/home/ubuntu/mobile-assets-backend"},
+        backend_input_dir_,
+        comfy_input_dir_,
+        comfy_output_dir_,
+        comfy_client_,
+        workflow_builder_,
+        output_service_
+    } {
     task_store_.Load(tasks_, next_task_id_);
 }
 
@@ -660,260 +674,6 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
     }
 }
 
-std::optional<std::string> GenerationService::RunRemoveObjectsCleanupViaComfy(
-    const json::object& request,
-    const std::string& task_id,
-    int image_index
-) {
-    try {
-        UpdateTaskProgress(task_id, 10);
-
-        const std::string source_image_url =
-            ReadStringOrEmpty(request, "sourceImageUrl");
-
-        const std::string mask_image_url =
-            ReadOptionString(request, "maskImageUrl");
-
-        if (source_image_url.empty() || mask_image_url.empty()) {
-            return std::nullopt;
-        }
-
-        auto source_file_name =
-            ExtractFileNameFromOutputUrl(source_image_url);
-
-        auto mask_file_name =
-            ExtractFileNameFromUploadUrl(mask_image_url);
-
-        if (!source_file_name || !mask_file_name) {
-            return std::nullopt;
-        }
-
-        const fs::path source_file =
-            output_service_.GetFilePath(*source_file_name);
-
-        const fs::path raw_mask_file =
-            backend_input_dir_ / *mask_file_name;
-
-        if (!fs::exists(source_file) || !fs::exists(raw_mask_file)) {
-            return std::nullopt;
-        }
-
-        fs::create_directories(comfy_input_dir_);
-        fs::create_directories(comfy_output_dir_);
-
-        const std::string cleanup_source_name =
-            "cleanup_source_" + task_id + "_" +
-            std::to_string(image_index) + ".png";
-
-        const std::string cleanup_mask_name =
-            "cleanup_mask_" + task_id + "_" +
-            std::to_string(image_index) + ".png";
-
-        const fs::path backend_source_file =
-            backend_input_dir_ / cleanup_source_name;
-
-        const fs::path prepared_mask_file =
-            backend_input_dir_ / cleanup_mask_name;
-
-        fs::copy_file(
-            source_file,
-            backend_source_file,
-            fs::copy_options::overwrite_existing
-        );
-
-        const std::string prepare_command =
-            "cd /home/ubuntu/mobile-assets-backend && "
-            ".venv-tools/bin/python3 scripts/prepare_manual_cleanup_mask.py "
-            "\"" + raw_mask_file.string() + "\" "
-            "\"" + prepared_mask_file.string() + "\"";
-
-        std::cout
-            << "[REMOVE_OBJECTS_CLEANUP_MASK_PREPARE_START]\n"
-            << "command=" << prepare_command << "\n"
-            << std::endl;
-
-        const int prepare_result =
-            std::system(prepare_command.c_str());
-
-        if (
-            prepare_result != 0 ||
-            !fs::exists(prepared_mask_file) ||
-            fs::file_size(prepared_mask_file) == 0
-        ) {
-            std::cout
-                << "[REMOVE_OBJECTS_CLEANUP_MASK_PREPARE_FAILED]\n"
-                << "result=" << prepare_result << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        const fs::path comfy_source_file =
-            comfy_input_dir_ / cleanup_source_name;
-
-        const fs::path comfy_mask_file =
-            comfy_input_dir_ / cleanup_mask_name;
-
-        fs::copy_file(
-            backend_source_file,
-            comfy_source_file,
-            fs::copy_options::overwrite_existing
-        );
-
-        fs::copy_file(
-            prepared_mask_file,
-            comfy_mask_file,
-            fs::copy_options::overwrite_existing
-        );
-
-        const bool source_uploaded =
-            comfy_client_.UploadImage(
-                backend_source_file,
-                cleanup_source_name
-            );
-
-        const bool mask_uploaded =
-            comfy_client_.UploadImage(
-                prepared_mask_file,
-                cleanup_mask_name
-            );
-
-        if (!source_uploaded || !mask_uploaded) {
-            std::cout
-                << "[REMOVE_OBJECTS_CLEANUP_UPLOAD_FAILED]\n"
-                << "sourceUploaded=" << source_uploaded << "\n"
-                << "maskUploaded=" << mask_uploaded << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        UpdateTaskProgress(task_id, 25);
-
-        const std::string output_prefix =
-            "pixo_remove_objects_cleanup_" + task_id + "_" +
-            std::to_string(image_index);
-
-        const std::string positive_prompt =
-            "remove selected marked leftovers completely, reconstruct background naturally, match nearby colors, match nearby texture, seamless realistic photo";
-
-        json::object workflow =
-            workflow_builder_.BuildRemoveObjectsInpaintWorkflow(
-                cleanup_source_name,
-                cleanup_mask_name,
-                output_prefix,
-                positive_prompt,
-                0.62
-            );
-
-        std::cout
-            << "[REMOVE_OBJECTS_CLEANUP_COMFY_WORKFLOW_JSON]\n"
-            << json::serialize(workflow)
-            << "\n"
-            << std::endl;
-
-        auto prompt_id =
-            comfy_client_.QueuePrompt(workflow);
-
-        if (!prompt_id) {
-            return std::nullopt;
-        }
-
-        UpdateTaskProgress(task_id, 40);
-
-        auto comfy_output_file_name =
-            comfy_client_.WaitForFirstOutputFile(
-                *prompt_id,
-                240,
-                1000
-            );
-
-        if (
-            comfy_output_file_name &&
-            !comfy_output_file_name->starts_with(output_prefix)
-        ) {
-            comfy_output_file_name = std::nullopt;
-        }
-
-        if (!comfy_output_file_name) {
-            comfy_output_file_name =
-                FindNewestComfyOutputByPrefix(output_prefix);
-        }
-
-        if (!comfy_output_file_name) {
-            return std::nullopt;
-        }
-
-        UpdateTaskProgress(task_id, 85);
-
-        const fs::path local_comfy_output_file =
-            comfy_output_dir_ / *comfy_output_file_name;
-
-        if (!fs::exists(local_comfy_output_file)) {
-            const bool downloaded =
-                comfy_client_.DownloadOutputImage(
-                    *comfy_output_file_name,
-                    local_comfy_output_file
-                );
-
-            if (!downloaded) {
-                return std::nullopt;
-            }
-        }
-
-        const fs::path composited_file =
-            comfy_output_dir_ /
-            ("final_" + *comfy_output_file_name);
-
-        const std::string composite_command =
-            "cd /home/ubuntu/mobile-assets-backend && "
-            ".venv-tools/bin/python3 scripts/apply_inpaint_mask.py "
-            "\"" + source_file.string() + "\" "
-            "\"" + local_comfy_output_file.string() + "\" "
-            "\"" + prepared_mask_file.string() + "\" "
-            "\"" + composited_file.string() + "\"";
-
-        std::cout
-            << "[REMOVE_OBJECTS_CLEANUP_POST_COMPOSITE_START]\n"
-            << "command=" << composite_command << "\n"
-            << std::endl;
-
-        const int composite_result =
-            std::system(composite_command.c_str());
-
-        if (
-            composite_result != 0 ||
-            !fs::exists(composited_file) ||
-            fs::file_size(composited_file) == 0
-        ) {
-            std::cout
-                << "[REMOVE_OBJECTS_CLEANUP_POST_COMPOSITE_FAILED]\n"
-                << "result=" << composite_result << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        const fs::path saved_output_file =
-            output_service_.SaveFromComfyOutput(composited_file);
-
-        UpdateTaskProgress(task_id, 100);
-
-        return output_service_.GetPublicUrl(
-            saved_output_file.filename().string()
-        );
-
-    } catch (const std::exception& e) {
-        std::cout
-            << "[REMOVE_OBJECTS_CLEANUP_COMFY_EXCEPTION]\n"
-            << "taskId=" << task_id << "\n"
-            << "message=" << e.what() << "\n"
-            << std::endl;
-
-        return std::nullopt;
-    }
-}
-
 std::vector<std::string> GenerationService::RunGenerationViaComfy(
     const json::object& request,
     const std::string& task_id,
@@ -928,11 +688,11 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
 	
 	    auto output_url =
-	        RunRemoveObjectsCleanupViaComfy(
-	            request,
-	            task_id,
-	            0
-	        );
+		    remove_objects_cleanup_runner_.Run(
+		        request,
+		        task_id,
+		        0
+		    );
 	
 	    if (output_url) {
 	        result_urls.push_back(*output_url);
@@ -956,11 +716,27 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        return result_urls;
 	    }
 	
+	    std::string mode =
+		    ReadOptionString(request, "backgroundMode");
+		
+		if (mode.empty()) {
+		    mode = ReadOptionString(request, "backgroundType");
+		}
+		
+		if (mode.empty()) {
+		    mode = ReadOptionString(request, "type");
+		}
+		
+		std::cout
+		    << "[REMOVE_BACKGROUND_MODE]\n"
+		    << "mode=" << mode << "\n"
+		    << std::endl;
+	
 	    auto output_url =
-	        local_tool_runner_.RunRemoveBackground(
+	        remove_background_runner_.Run(
 	            task_id,
 	            input_file_names.front(),
-	            request
+	            mode
 	        );
 	
 	    if (output_url) {

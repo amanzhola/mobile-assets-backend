@@ -6,6 +6,8 @@
 #include "template_asset_service.h"
 #include "generation/generation_task_store.h"
 #include "local_tools/local_tool_runner.h"
+#include "local_tools/remove_background_runner.h"
+#include "local_tools/remove_objects_cleanup_runner.h"
 
 #include <boost/json.hpp>
 
@@ -104,12 +106,6 @@ private:
         int image_index,
         const std::string& enhance_mode
     );
-    
-    std::optional<std::string> RunRemoveObjectsCleanupViaComfy(
-	    const json::object& request,
-	    const std::string& task_id,
-	    int image_index
-	);
 
     std::optional<std::string> FindNewestComfyOutputByPrefix(
         const std::string& output_prefix
@@ -139,6 +135,9 @@ private:
     fs::path backend_input_dir_;
     fs::path comfy_input_dir_;
     fs::path comfy_output_dir_;
+    
+    local_tools::RemoveBackgroundRunner remove_background_runner_;
+	local_tools::RemoveObjectsCleanupRunner remove_objects_cleanup_runner_;
 };
 
 }  // namespace generation
