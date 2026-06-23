@@ -38,6 +38,7 @@ add_executable(mobile_assets_backend
     src/local_tools/remove_objects_cleanup_runner.cpp
     src/local_tools/remove_objects_runner.cpp
     src/local_tools/ai_enhancer_runner.cpp
+    src/local_tools/template_runner.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE

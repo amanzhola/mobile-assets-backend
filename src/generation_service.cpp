@@ -66,6 +66,16 @@ GenerationService::GenerationService(
         output_service_,
         local_tool_runner_
     }
+    , template_runner_{
+	    templates_file_,
+	    backend_input_dir_,
+	    comfy_input_dir_,
+	    comfy_output_dir_,
+	    comfy_client_,
+	    workflow_builder_,
+	    output_service_,
+	    template_asset_service_
+	}
     , remove_objects_cleanup_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -141,60 +151,6 @@ std::string GenerationService::MakeMockResultUrl(
         + task_id + "_"
         + std::to_string(index)
         + ".webp";
-}
-
-std::string GenerationService::FindTemplatePrompt(const std::string& template_id) const {
-    std::ifstream input(templates_file_);
-
-    if (!input.is_open()) {
-        throw std::runtime_error("Failed to open templates file: " + templates_file_.string());
-    }
-
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-
-    json::value parsed = json::parse(buffer.str());
-
-    if (!parsed.is_object()) {
-        return {};
-    }
-
-    const json::object& root = parsed.as_object();
-
-    auto templates_it = root.find("templates");
-
-    if (templates_it == root.end() || !templates_it->value().is_array()) {
-        return {};
-    }
-
-    for (const auto& item : templates_it->value().as_array()) {
-        if (!item.is_object()) {
-            continue;
-        }
-
-        const json::object& obj = item.as_object();
-        const std::string id = ReadStringOrEmpty(obj, "id");
-
-        if (id == template_id) {
-            return ReadStringOrEmpty(obj, "prompt");
-        }
-    }
-
-    return {};
-}
-
-std::string GenerationService::BuildTemplatePositivePrompt(
-    const std::string& template_id
-) const {
-    return FindTemplatePrompt(template_id);
-}
-
-double GenerationService::ResolveTemplateDenoise(
-    const std::string& template_id
-) const {
-    (void)template_id;
-
-    return 0.32;
 }
 
 std::vector<std::string> GenerationService::ExtractUploadedFileNames(
@@ -368,39 +324,7 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
 
         json::object workflow;
 
-        if (server_action == "template") {
-		    const std::string template_id =
-		        ReadTemplateId(request);
-		
-		    const std::string positive_prompt =
-		        BuildTemplatePositivePrompt(template_id);
-		
-		    const double denoise =
-		        ResolveTemplateDenoise(template_id);
-		
-		    auto template_workflow =
-		        BuildTemplateWorkflowForGeneration(
-		            template_id,
-		            task_id,
-		            image_index,
-		            output_prefix,
-		            positive_prompt,
-		            denoise,
-		            backend_input_file,
-		            backend_input_dir_,
-		            comfy_input_dir_,
-		            comfy_client_,
-		            workflow_builder_,
-		            template_asset_service_
-		        );
-		
-		    if (!template_workflow) {
-		        return std::nullopt;
-		    }
-		
-		    workflow = std::move(template_workflow->workflow);
-		    
-		} else if (IsToolAction(server_action)) {
+        if (IsToolAction(server_action)) {
             std::cout
                 << "[BUILD_WORKFLOW]\n"
                 << "type=tool\n"
@@ -749,6 +673,47 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	
 	    return result_urls;
 	}
+	
+	if (server_action == "template") {
+	    UpdateTaskProgress(task_id, 1);
+	
+	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+	
+	    const std::vector<std::string> input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    const std::string template_id =
+	        ReadTemplateId(request);
+	
+	    auto output_url =
+	        template_runner_.Run(
+	            template_id,
+	            input_file_names.front(),
+	            task_id,
+	            0,
+	            [this, &task_id](int progress)
+	            {
+	                UpdateTaskProgress(task_id, progress);
+	            }
+	        );
+	
+	    if (output_url) {
+	        result_urls.push_back(*output_url);
+	    }
+	
+	    while (
+	        !result_urls.empty() &&
+	        static_cast<int>(result_urls.size()) < output_count
+	    ) {
+	        result_urls.push_back(result_urls.front());
+	    }
+	
+	    return result_urls;
+	}
 		
     if (server_action == "prompt") {
         const auto uploaded_image_urls =
@@ -1020,7 +985,7 @@ json::object GenerationService::CreateGeneration(const json::object& request) {
             );
         }
 
-        prompt = FindTemplatePrompt(template_id);
+        prompt = template_runner_.FindTemplatePrompt(template_id);
 
         if (prompt.empty()) {
             return MakeError(

@@ -10,6 +10,7 @@
 #include "local_tools/remove_objects_cleanup_runner.h"
 #include "local_tools/remove_objects_runner.h"
 #include "local_tools/ai_enhancer_runner.h"
+#include "local_tools/template_runner.h"
 
 #include <boost/json.hpp>
 
@@ -55,18 +56,6 @@ private:
         const std::string& action,
         const std::string& task_id,
         int index
-    ) const;
-
-    std::string FindTemplatePrompt(
-        const std::string& template_id
-    ) const;
-
-    std::string BuildTemplatePositivePrompt(
-        const std::string& template_id
-    ) const;
-
-    double ResolveTemplateDenoise(
-        const std::string& template_id
     ) const;
 
     void StartComfyGenerationInBackground(
@@ -142,6 +131,7 @@ private:
     local_tools::AiEnhancerRunner ai_enhancer_runner_;
     local_tools::RemoveObjectsRunner remove_objects_runner_;
 	local_tools::RemoveObjectsCleanupRunner remove_objects_cleanup_runner_;
+	local_tools::TemplateRunner template_runner_;
 };
 
 }  // namespace generation
