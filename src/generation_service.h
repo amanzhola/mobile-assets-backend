@@ -12,6 +12,7 @@
 #include "local_tools/ai_enhancer_runner.h"
 #include "local_tools/template_runner.h"
 #include "local_tools/tool_action_runner.h"
+#include "local_tools/prompt_runner.h"
 
 #include <boost/json.hpp>
 
@@ -121,6 +122,7 @@ private:
 	local_tools::RemoveObjectsCleanupRunner remove_objects_cleanup_runner_;
 	local_tools::TemplateRunner template_runner_;
 	local_tools::ToolActionRunner tool_action_runner_;
+	local_tools::PromptRunner prompt_runner_;
 };
 
 }  // namespace generation

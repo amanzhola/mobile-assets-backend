@@ -79,6 +79,11 @@ GenerationService::GenerationService(
 	    workflow_builder_,
 	    output_service_
 	}
+	, prompt_runner_{
+	    fs::path{"/home/ubuntu/mobile-assets-backend"},
+	    backend_input_dir_,
+	    output_service_
+	}
     , remove_objects_cleanup_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -433,24 +438,34 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	}
 		
     if (server_action == "prompt") {
-        const auto uploaded_image_urls =
-            ReadStringArray(request, "uploadedImageUrls");
-
-        const std::string source_image_url =
-            ReadStringOrEmpty(request, "sourceImageUrl");
-
-        if (!uploaded_image_urls.empty()) {
-            result_urls = uploaded_image_urls;
-        } else if (!source_image_url.empty()) {
-            result_urls.push_back(source_image_url);
-        }
-
-        DuplicateResultsToOutputCount(result_urls, output_count);
-
-        UpdateTaskProgress(task_id, 100);
-
-        return result_urls;
-    }
+	    UpdateTaskProgress(task_id, 1);
+	
+	    const std::vector<std::string> input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    auto output_url =
+	        prompt_runner_.Run(
+	            request,
+	            input_file_names,
+	            task_id,
+	            [this, &task_id](int progress)
+	            {
+	                UpdateTaskProgress(task_id, progress);
+	            }
+	        );
+	
+	    if (output_url) {
+	        result_urls.push_back(*output_url);
+	    }
+	
+	    DuplicateResultsToOutputCount(result_urls, output_count);
+	
+	    return result_urls;
+	}
 
     std::cout
         << "[UNHANDLED_GENERATION_ACTION]\n"

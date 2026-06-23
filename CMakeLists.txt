@@ -40,6 +40,7 @@ add_executable(mobile_assets_backend
     src/local_tools/ai_enhancer_runner.cpp
     src/local_tools/template_runner.cpp
     src/local_tools/tool_action_runner.cpp
+    src/local_tools/prompt_runner.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE
