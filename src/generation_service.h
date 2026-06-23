@@ -90,19 +90,6 @@ private:
         int output_count
     );
 
-    std::optional<std::string> RunSingleImageViaComfy(
-        const json::object& request,
-        const std::string& input_file_name,
-        const std::string& task_id,
-        const std::string& server_action,
-        int image_index,
-        const std::string& enhance_mode
-    );
-
-    std::optional<std::string> FindNewestComfyOutputByPrefix(
-        const std::string& output_prefix
-    ) const;
-
     std::vector<std::string> ExtractUploadedFileNames(
         const json::object& request
     ) const;

@@ -2,17 +2,12 @@
 
 #include "generation/generation_json.h"
 #include "generation/generation_tool_prompts.h"
-#include "generation/generation_template_workflow.h"
 
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <mutex>
-#include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -161,6 +156,18 @@ std::string GenerationService::MakeMockResultUrl(
         + ".webp";
 }
 
+void DuplicateResultsToOutputCount(
+    std::vector<std::string>& result_urls,
+    int output_count
+) {
+    while (
+        !result_urls.empty() &&
+        static_cast<int>(result_urls.size()) < output_count
+    ) {
+        result_urls.push_back(result_urls.front());
+    }
+}
+
 std::vector<std::string> GenerationService::ExtractUploadedFileNames(
     const json::object& request
 ) const {
@@ -209,278 +216,6 @@ std::vector<std::string> GenerationService::ExtractUploadedFileNames(
     return result;
 }
 
-std::optional<std::string> GenerationService::FindNewestComfyOutputByPrefix(
-    const std::string& output_prefix
-) const {
-    try {
-        if (!fs::exists(comfy_output_dir_)) {
-            return std::nullopt;
-        }
-
-        fs::path newest_file;
-        fs::file_time_type newest_time{};
-        bool found = false;
-
-        for (const auto& entry : fs::directory_iterator(comfy_output_dir_)) {
-            if (!entry.is_regular_file()) {
-                continue;
-            }
-
-            const std::string file_name = entry.path().filename().string();
-
-            if (!file_name.starts_with(output_prefix)) {
-                continue;
-            }
-
-            const auto modified_time = fs::last_write_time(entry.path());
-
-            if (!found || modified_time > newest_time) {
-                found = true;
-                newest_time = modified_time;
-                newest_file = entry.path();
-            }
-        }
-
-        if (!found) {
-            return std::nullopt;
-        }
-
-        return newest_file.filename().string();
-
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-std::optional<std::string> GenerationService::RunSingleImageViaComfy(
-    const json::object& request,
-    const std::string& input_file_name,
-    const std::string& task_id,
-    const std::string& server_action,
-    int image_index,
-    const std::string& enhance_mode
-) {
-    try {
-        std::cout
-            << "[RUN_SINGLE_IMAGE_START]\n"
-            << "taskId=" << task_id << "\n"
-            << "serverAction=" << server_action << "\n"
-            << "inputFileName=" << input_file_name << "\n"
-            << "imageIndex=" << image_index << "\n"
-            << std::endl;
-
-        fs::create_directories(comfy_input_dir_);
-
-        const fs::path backend_input_file =
-            backend_input_dir_ / input_file_name;
-
-        const fs::path comfy_input_file =
-            comfy_input_dir_ / input_file_name;
-
-        std::cout
-            << "[INPUT_PATHS]\n"
-            << "backendInputFile=" << backend_input_file.string() << "\n"
-            << "comfyInputFile=" << comfy_input_file.string() << "\n"
-            << std::endl;
-
-        if (!fs::exists(backend_input_file)) {
-            std::cout
-                << "[INPUT_FILE_MISSING]\n"
-                << "file=" << backend_input_file.string() << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        UpdateTaskProgress(task_id, 10);
-
-        fs::copy_file(
-            backend_input_file,
-            comfy_input_file,
-            fs::copy_options::overwrite_existing
-        );
-
-        std::cout
-            << "[USER_IMAGE_COPIED_TO_COMFY]\n"
-            << "file=" << comfy_input_file.string() << "\n"
-            << std::endl;
-
-        const bool uploaded = comfy_client_.UploadImage(
-            backend_input_file,
-            input_file_name
-        );
-
-        if (!uploaded) {
-            std::cout
-                << "[COMFY_UPLOAD_FAILED]\n"
-                << "file=" << backend_input_file.string() << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        UpdateTaskProgress(task_id, 20);
-
-        const std::string output_prefix =
-            "pixo_" + server_action + "_" + task_id + "_" +
-            std::to_string(image_index);
-
-        std::cout
-            << "[OUTPUT_PREFIX]\n"
-            << "outputPrefix=" << output_prefix << "\n"
-            << std::endl;
-
-        json::object workflow;
-
-        std::cout
-            << "[COMFY_WORKFLOW_JSON]\n"
-            << json::serialize(workflow)
-            << "\n"
-            << std::endl;
-
-        auto prompt_id = comfy_client_.QueuePrompt(workflow);
-
-        if (!prompt_id) {
-            std::cout
-                << "[COMFY_QUEUE_FAILED]\n"
-                << "taskId=" << task_id << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        std::cout
-            << "[COMFY_PROMPT_QUEUED]\n"
-            << "promptId=" << *prompt_id << "\n"
-            << std::endl;
-
-        UpdateTaskProgress(task_id, 30);
-        UpdateTaskProgress(task_id, 40);
-
-        auto comfy_output_file_name = comfy_client_.WaitForFirstOutputFile(
-            *prompt_id,
-            240,
-            1000
-        );
-
-        std::cout
-            << "[COMFY_WAIT_RESULT]\n"
-            << "hasOutput=" << static_cast<bool>(comfy_output_file_name) << "\n";
-
-        if (comfy_output_file_name) {
-            std::cout
-                << "outputFile=" << *comfy_output_file_name << "\n";
-        }
-
-        std::cout << std::endl;
-
-        if (
-            comfy_output_file_name &&
-            !comfy_output_file_name->starts_with(output_prefix)
-        ) {
-            std::cout
-                << "[COMFY_OUTPUT_PREFIX_MISMATCH]\n"
-                << "taskId=" << task_id << "\n"
-                << "expectedPrefix=" << output_prefix << "\n"
-                << "actualFile=" << *comfy_output_file_name << "\n"
-                << std::endl;
-
-            comfy_output_file_name = std::nullopt;
-        }
-
-        if (!comfy_output_file_name) {
-            std::cout
-                << "[COMFY_OUTPUT_FALLBACK_SEARCH]\n"
-                << "outputPrefix=" << output_prefix << "\n"
-                << std::endl;
-
-            comfy_output_file_name =
-                FindNewestComfyOutputByPrefix(output_prefix);
-        }
-
-        if (!comfy_output_file_name) {
-            std::cout
-                << "[COMFY_NO_OUTPUT]\n"
-                << "taskId=" << task_id << "\n"
-                << "outputPrefix=" << output_prefix << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        UpdateTaskProgress(task_id, 85);
-
-        const fs::path local_comfy_output_file =
-            comfy_output_dir_ / *comfy_output_file_name;
-
-        fs::path source_output_file = local_comfy_output_file;
-
-        std::cout
-            << "[COMFY_OUTPUT_FILE]\n"
-            << "fileName=" << *comfy_output_file_name << "\n"
-            << "localPath=" << local_comfy_output_file.string() << "\n"
-            << "exists=" << fs::exists(local_comfy_output_file) << "\n"
-            << std::endl;
-
-        if (!fs::exists(local_comfy_output_file)) {
-            const bool downloaded = comfy_client_.DownloadOutputImage(
-                *comfy_output_file_name,
-                local_comfy_output_file
-            );
-
-            if (!downloaded) {
-                std::cout
-                    << "[COMFY_OUTPUT_SOURCE_ERROR]\n"
-                    << "taskId=" << task_id << "\n"
-                    << "file=" << local_comfy_output_file.string() << "\n"
-                    << "message=local output missing and remote download failed\n"
-                    << std::endl;
-
-                return std::nullopt;
-            }
-        }
-
-        UpdateTaskProgress(task_id, 92);
-
-        const fs::path saved_output_file =
-            output_service_.SaveFromComfyOutput(source_output_file);
-
-        UpdateTaskProgress(task_id, 95);
-
-        const std::string public_url =
-            output_service_.GetPublicUrl(
-                saved_output_file.filename().string()
-            );
-
-        std::cout
-            << "[GENERATION_SUCCESS]\n"
-            << "taskId=" << task_id << "\n"
-            << "publicUrl=" << public_url << "\n"
-            << std::endl;
-
-        return public_url;
-
-    } catch (const std::exception& e) {
-        std::cout
-            << "[RUN_SINGLE_IMAGE_EXCEPTION]\n"
-            << "taskId=" << task_id << "\n"
-            << "serverAction=" << server_action << "\n"
-            << "message=" << e.what() << "\n"
-            << std::endl;
-
-        return std::nullopt;
-
-    } catch (...) {
-        std::cout
-            << "[RUN_SINGLE_IMAGE_UNKNOWN_EXCEPTION]\n"
-            << "taskId=" << task_id << "\n"
-            << "serverAction=" << server_action << "\n"
-            << std::endl;
-
-        return std::nullopt;
-    }
-}
-
 std::vector<std::string> GenerationService::RunGenerationViaComfy(
     const json::object& request,
     const std::string& task_id,
@@ -512,12 +247,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        result_urls.push_back(*output_url);
 	    }
 	
-	    while (
-	        !result_urls.empty() &&
-	        static_cast<int>(result_urls.size()) < output_count
-	    ) {
-	        result_urls.push_back(result_urls.front());
-	    }
+	    DuplicateResultsToOutputCount(result_urls, output_count);
 	
 	    return result_urls;
 	}
@@ -557,12 +287,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        result_urls.push_back(*output_url);
 	    }
 	
-	    while (
-	        !result_urls.empty() &&
-	        static_cast<int>(result_urls.size()) < output_count
-	    ) {
-	        result_urls.push_back(result_urls.front());
-	    }
+	    DuplicateResultsToOutputCount(result_urls, output_count);
 	
 	    UpdateTaskProgress(task_id, 100);
 	
@@ -596,12 +321,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        result_urls.push_back(*output_url);
 	    }
 	
-	    while (
-	        !result_urls.empty() &&
-	        static_cast<int>(result_urls.size()) < output_count
-	    ) {
-	        result_urls.push_back(result_urls.front());
-	    }
+	    DuplicateResultsToOutputCount(result_urls, output_count);
 	
 	    return result_urls;
 	}
@@ -637,12 +357,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        result_urls.push_back(*output_url);
 	    }
 	
-	    while (
-	        !result_urls.empty() &&
-	        static_cast<int>(result_urls.size()) < output_count
-	    ) {
-	        result_urls.push_back(result_urls.front());
-	    }
+	    DuplicateResultsToOutputCount(result_urls, output_count);
 	
 	    return result_urls;
 	}
@@ -678,12 +393,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        result_urls.push_back(*output_url);
 	    }
 	
-	    while (
-	        !result_urls.empty() &&
-	        static_cast<int>(result_urls.size()) < output_count
-	    ) {
-	        result_urls.push_back(result_urls.front());
-	    }
+	    DuplicateResultsToOutputCount(result_urls, output_count);
 	
 	    return result_urls;
 	}
@@ -717,12 +427,7 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	        result_urls.push_back(*output_url);
 	    }
 	
-	    while (
-	        !result_urls.empty() &&
-	        static_cast<int>(result_urls.size()) < output_count
-	    ) {
-	        result_urls.push_back(result_urls.front());
-	    }
+	    DuplicateResultsToOutputCount(result_urls, output_count);
 	
 	    return result_urls;
 	}
@@ -740,53 +445,18 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
             result_urls.push_back(source_image_url);
         }
 
-        while (
-            !result_urls.empty() &&
-            static_cast<int>(result_urls.size()) < output_count
-        ) {
-            result_urls.push_back(result_urls.front());
-        }
+        DuplicateResultsToOutputCount(result_urls, output_count);
 
         UpdateTaskProgress(task_id, 100);
 
         return result_urls;
     }
 
-    UpdateTaskProgress(task_id, 1);
-
-    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
-
-    UpdateTaskProgress(task_id, 10);
-
-    const std::vector<std::string> input_file_names =
-        ExtractUploadedFileNames(request);
-
-    if (input_file_names.empty()) {
-        return result_urls;
-    }
-
-    const std::string enhance_mode =
-        ReadOptionString(request, "enhanceMode");
-
-    auto output_url = RunSingleImageViaComfy(
-        request,
-        input_file_names.front(),
-        task_id,
-        server_action,
-        0,
-        enhance_mode
-    );
-
-    if (output_url) {
-        result_urls.push_back(*output_url);
-    }
-
-    while (
-        !result_urls.empty() &&
-        static_cast<int>(result_urls.size()) < output_count
-    ) {
-        result_urls.push_back(result_urls.front());
-    }
+    std::cout
+        << "[UNHANDLED_GENERATION_ACTION]\n"
+        << "taskId=" << task_id << "\n"
+        << "serverAction=" << server_action << "\n"
+        << std::endl;
 
     return result_urls;
 }
