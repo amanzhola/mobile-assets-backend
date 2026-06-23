@@ -48,6 +48,14 @@ GenerationService::GenerationService(
         backend_input_dir_,
         output_service_
     }
+    , ai_enhancer_runner_{
+        backend_input_dir_,
+        comfy_input_dir_,
+        comfy_output_dir_,
+        comfy_client_,
+        workflow_builder_,
+        output_service_
+    }
     , remove_objects_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -360,19 +368,7 @@ std::optional<std::string> GenerationService::RunSingleImageViaComfy(
 
         json::object workflow;
 
-        if (server_action == "ai_enhancer") {
-            std::cout
-                << "[BUILD_WORKFLOW]\n"
-                << "type=ai_enhancer\n"
-                << std::endl;
-
-            workflow = workflow_builder_.BuildAiEnhancerWorkflow(
-                input_file_name,
-                output_prefix,
-                enhance_mode
-            );
-
-        } else if (server_action == "template") {
+        if (server_action == "template") {
 		    const std::string template_id =
 		        ReadTemplateId(request);
 		
@@ -695,6 +691,47 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	            task_id,
 	            0,
 	            [this, &task_id](int progress) {
+	                UpdateTaskProgress(task_id, progress);
+	            }
+	        );
+	
+	    if (output_url) {
+	        result_urls.push_back(*output_url);
+	    }
+	
+	    while (
+	        !result_urls.empty() &&
+	        static_cast<int>(result_urls.size()) < output_count
+	    ) {
+	        result_urls.push_back(result_urls.front());
+	    }
+	
+	    return result_urls;
+	}
+	
+	if (server_action == "ai_enhancer") {
+	    UpdateTaskProgress(task_id, 1);
+	
+	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+	
+	    const std::vector<std::string> input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    const std::string enhance_mode =
+	        ReadOptionString(request, "enhanceMode");
+	
+	    auto output_url =
+	        ai_enhancer_runner_.Run(
+	            input_file_names.front(),
+	            task_id,
+	            0,
+	            enhance_mode,
+	            [this, &task_id](int progress)
+	            {
 	                UpdateTaskProgress(task_id, progress);
 	            }
 	        );

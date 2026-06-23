@@ -9,6 +9,7 @@
 #include "local_tools/remove_background_runner.h"
 #include "local_tools/remove_objects_cleanup_runner.h"
 #include "local_tools/remove_objects_runner.h"
+#include "local_tools/ai_enhancer_runner.h"
 
 #include <boost/json.hpp>
 
@@ -138,6 +139,7 @@ private:
     fs::path comfy_output_dir_;
     
     local_tools::RemoveBackgroundRunner remove_background_runner_;
+    local_tools::AiEnhancerRunner ai_enhancer_runner_;
     local_tools::RemoveObjectsRunner remove_objects_runner_;
 	local_tools::RemoveObjectsCleanupRunner remove_objects_cleanup_runner_;
 };
