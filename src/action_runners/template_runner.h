@@ -17,6 +17,10 @@ namespace action_runners {
 namespace json = boost::json;
 namespace fs = std::filesystem;
 
+struct TemplateWorkflowResult {
+    json::object workflow;
+};
+
 class TemplateRunner {
 public:
     TemplateRunner(
@@ -46,6 +50,16 @@ private:
     double ResolveTemplateDenoise(
         const std::string& template_id
     ) const;
+
+    std::optional<TemplateWorkflowResult> BuildTemplateWorkflow(
+        const std::string& template_id,
+        const std::string& task_id,
+        int image_index,
+        const std::string& output_prefix,
+        const std::string& positive_prompt,
+        double denoise,
+        const fs::path& backend_input_file
+    );
 
     std::optional<std::string> FindNewestComfyOutputByPrefix(
         const std::string& output_prefix
