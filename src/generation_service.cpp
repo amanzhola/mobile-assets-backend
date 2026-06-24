@@ -84,6 +84,11 @@ GenerationService::GenerationService(
 	    backend_input_dir_,
 	    output_service_
 	}
+	, upscale_runner_{
+	    fs::path{"/home/ubuntu/mobile-assets-backend"},
+	    backend_input_dir_,
+	    output_service_
+	}
     , remove_objects_cleanup_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -140,6 +145,10 @@ std::string GenerationService::ChooseWorkflow(const std::string& action) const {
     
     if (action == "remove_objects_cleanup") {
 	    return "workflows/remove_objects_cleanup_inpaint.json";
+	}
+	
+	if (action == "upscale_image") {
+	    return "local_tools/upscale_image";
 	}
 
     if (IsToolAction(action)) {
@@ -388,6 +397,36 @@ std::vector<std::string> GenerationService::RunGenerationViaComfy(
 	            input_file_names.front(),
 	            task_id,
 	            0,
+	            [this, &task_id](int progress)
+	            {
+	                UpdateTaskProgress(task_id, progress);
+	            }
+	        );
+	
+	    if (output_url) {
+	        result_urls.push_back(*output_url);
+	    }
+	
+	    DuplicateResultsToOutputCount(result_urls, output_count);
+	
+	    return result_urls;
+	}
+	
+	if (server_action == "upscale_image") {
+	    UpdateTaskProgress(task_id, 1);
+	
+	    const std::vector<std::string> input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    auto output_url =
+	        upscale_runner_.Run(
+	            request,
+	            input_file_names.front(),
+	            task_id,
 	            [this, &task_id](int progress)
 	            {
 	                UpdateTaskProgress(task_id, progress);
