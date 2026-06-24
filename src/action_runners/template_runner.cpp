@@ -1,14 +1,33 @@
 #include "template_runner.h"
 
 #include "../generation/generation_json.h"
-#include "../generation/generation_template_workflow.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 namespace action_runners {
+	
+namespace {
+
+std::string ShellQuote(const std::string& value) {
+    std::string result = "'";
+
+    for (char ch : value) {
+        if (ch == '\'') {
+            result += "'\\''";
+        } else {
+            result += ch;
+        }
+    }
+
+    result += "'";
+    return result;
+}
+
+}  // namespace
 
 TemplateRunner::TemplateRunner(
     fs::path templates_file,
@@ -79,6 +98,232 @@ double TemplateRunner::ResolveTemplateDenoise(
 ) const {
     (void)template_id;
     return 0.32;
+}
+
+std::optional<TemplateWorkflowResult> TemplateRunner::BuildTemplateWorkflow(
+    const std::string& template_id,
+    const std::string& task_id,
+    int image_index,
+    const std::string& output_prefix,
+    const std::string& positive_prompt,
+    double denoise,
+    const fs::path& backend_input_file
+) {
+    std::cout
+        << "[BUILD_WORKFLOW]\n"
+        << "type=template\n"
+        << "templateId=" << template_id << "\n"
+        << "positivePrompt=" << positive_prompt << "\n"
+        << "denoise=" << denoise << "\n"
+        << "outputPrefix=" << output_prefix << "\n"
+        << std::endl;
+
+    if (template_id.empty()) {
+        std::cout << "[TEMPLATE_ID_MISSING]\n" << std::endl;
+        return std::nullopt;
+    }
+
+    if (positive_prompt.empty()) {
+        std::cout
+            << "[TEMPLATE_PROMPT_MISSING]\n"
+            << "templateId=" << template_id << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    if (
+        !fs::exists(backend_input_file) ||
+        fs::file_size(backend_input_file) == 0
+    ) {
+        std::cout
+            << "[TEMPLATE_USER_INPUT_BAD_FILE]\n"
+            << "file=" << backend_input_file.string() << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    auto cached_template_path =
+        template_asset_service_.EnsureTemplateCached(template_id);
+
+    if (!cached_template_path) {
+        std::cout
+            << "[TEMPLATE_CACHE_FAILED]\n"
+            << "templateId=" << template_id << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    const fs::path cached_template_file =
+        fs::path(*cached_template_path);
+
+    if (
+        !fs::exists(cached_template_file) ||
+        fs::file_size(cached_template_file) == 0
+    ) {
+        std::cout
+            << "[TEMPLATE_CACHE_BAD_FILE]\n"
+            << "templateId=" << template_id << "\n"
+            << "path=" << cached_template_file.string() << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    std::cout
+        << "[TEMPLATE_CACHE_OK]\n"
+        << "path=" << cached_template_file.string() << "\n"
+        << "size=" << fs::file_size(cached_template_file) << "\n"
+        << std::endl;
+
+    fs::create_directories(backend_input_dir_);
+    fs::create_directories(comfy_input_dir_);
+
+    const std::string template_file_name =
+        "template_" + template_id + "_" +
+        task_id + "_" +
+        std::to_string(image_index) + ".png";
+
+    const fs::path converted_template_file =
+        backend_input_dir_ / template_file_name;
+
+    const std::string convert_template_command =
+        "cd /home/ubuntu/mobile-assets-backend && "
+        ".venv-tools/bin/python3 scripts/convert_image_to_png.py "
+        + ShellQuote(cached_template_file.string()) + " "
+        + ShellQuote(converted_template_file.string());
+
+    std::cout
+        << "[TEMPLATE_CONVERT_START]\n"
+        << "command=" << convert_template_command << "\n"
+        << std::endl;
+
+    const int convert_template_result =
+        std::system(convert_template_command.c_str());
+
+    if (
+        convert_template_result != 0 ||
+        !fs::exists(converted_template_file) ||
+        fs::file_size(converted_template_file) == 0
+    ) {
+        std::cout
+            << "[TEMPLATE_CONVERT_FAILED]\n"
+            << "templateId=" << template_id << "\n"
+            << "source=" << cached_template_file.string() << "\n"
+            << "output=" << converted_template_file.string() << "\n"
+            << "result=" << convert_template_result << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    const fs::path comfy_template_file =
+        comfy_input_dir_ / template_file_name;
+
+    fs::copy_file(
+        converted_template_file,
+        comfy_template_file,
+        fs::copy_options::overwrite_existing
+    );
+
+    if (
+        !fs::exists(comfy_template_file) ||
+        fs::file_size(comfy_template_file) == 0
+    ) {
+        std::cout
+            << "[TEMPLATE_COMFY_COPY_FAILED]\n"
+            << "src=" << converted_template_file.string() << "\n"
+            << "dst=" << comfy_template_file.string() << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    std::cout
+        << "[TEMPLATE_COMFY_READY]\n"
+        << "fileName=" << template_file_name << "\n"
+        << "path=" << comfy_template_file.string() << "\n"
+        << "size=" << fs::file_size(comfy_template_file) << "\n"
+        << std::endl;
+
+    const std::string subject_file_name =
+        "subject_" + task_id + "_" +
+        std::to_string(image_index) + ".png";
+
+    const fs::path transparent_subject_file =
+        backend_input_dir_ / subject_file_name;
+
+    const std::string remove_bg_command =
+        "cd /home/ubuntu/mobile-assets-backend && "
+        ".venv-tools/bin/python3 scripts/remove_background.py "
+        + ShellQuote(backend_input_file.string()) + " "
+        + ShellQuote(transparent_subject_file.string()) + " "
+        "transparent";
+
+    std::cout
+        << "[TEMPLATE_REMOVE_BG_START]\n"
+        << "command=" << remove_bg_command << "\n"
+        << std::endl;
+
+    const int remove_bg_result =
+        std::system(remove_bg_command.c_str());
+
+    if (
+        remove_bg_result != 0 ||
+        !fs::exists(transparent_subject_file) ||
+        fs::file_size(transparent_subject_file) == 0
+    ) {
+        std::cout
+            << "[TEMPLATE_REMOVE_BG_FAILED]\n"
+            << "input=" << backend_input_file.string() << "\n"
+            << "output=" << transparent_subject_file.string() << "\n"
+            << "result=" << remove_bg_result << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    const fs::path comfy_subject_file =
+        comfy_input_dir_ / subject_file_name;
+
+    fs::copy_file(
+        transparent_subject_file,
+        comfy_subject_file,
+        fs::copy_options::overwrite_existing
+    );
+
+    if (
+        !fs::exists(comfy_subject_file) ||
+        fs::file_size(comfy_subject_file) == 0
+    ) {
+        std::cout
+            << "[TEMPLATE_SUBJECT_COPY_FAILED]\n"
+            << "src=" << transparent_subject_file.string() << "\n"
+            << "dst=" << comfy_subject_file.string() << "\n"
+            << std::endl;
+        return std::nullopt;
+    }
+
+    std::cout
+        << "[TEMPLATE_SUBJECT_READY]\n"
+        << "subjectFileName=" << subject_file_name << "\n"
+        << "subjectPath=" << comfy_subject_file.string() << "\n"
+        << "templateFileName=" << template_file_name << "\n"
+        << "templatePath=" << comfy_template_file.string() << "\n"
+        << std::endl;
+
+    TemplateWorkflowResult result;
+    result.workflow =
+        workflow_builder_.BuildTemplateWorkflow(
+            subject_file_name,
+            template_file_name,
+            output_prefix,
+            positive_prompt,
+            denoise
+        );
+
+    std::cout
+        << "[TEMPLATE_WORKFLOW_BUILT]\n"
+        << json::serialize(result.workflow)
+        << "\n"
+        << std::endl;
+
+    return result;
 }
 
 std::optional<std::string> TemplateRunner::FindNewestComfyOutputByPrefix(
@@ -185,19 +430,14 @@ std::optional<std::string> TemplateRunner::Run(
         update_progress(20);
 
         auto template_workflow =
-            generation::BuildTemplateWorkflowForGeneration(
+            BuildTemplateWorkflow(
                 template_id,
                 task_id,
                 image_index,
                 output_prefix,
                 positive_prompt,
                 denoise,
-                backend_input_file,
-                backend_input_dir_,
-                comfy_input_dir_,
-                comfy_client_,
-                workflow_builder_,
-                template_asset_service_
+                backend_input_file
             );
 
         if (!template_workflow) {
