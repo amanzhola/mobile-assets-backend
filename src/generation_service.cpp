@@ -23,7 +23,7 @@ GenerationService::GenerationService(
     comfy::WorkflowBuilder& workflow_builder,
     output::OutputService& output_service,
     templates::TemplateAssetService& template_asset_service,
-    local_tools::LocalToolRunner& local_tool_runner,
+    local_tools::RemoveObjectsMaskRunner& remove_objects_mask_runner,
     fs::path backend_input_dir,
     fs::path comfy_input_dir,
     fs::path comfy_output_dir
@@ -34,7 +34,7 @@ GenerationService::GenerationService(
     , workflow_builder_{workflow_builder}
     , output_service_{output_service}
     , template_asset_service_{template_asset_service}
-    , local_tool_runner_{local_tool_runner}
+    , remove_objects_mask_runner_{remove_objects_mask_runner}
     , backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
     , comfy_output_dir_{std::move(comfy_output_dir)}
@@ -59,7 +59,7 @@ GenerationService::GenerationService(
         comfy_client_,
         workflow_builder_,
         output_service_,
-        local_tool_runner_
+        remove_objects_mask_runner_
     }
     , template_runner_{
 	    templates_file_,

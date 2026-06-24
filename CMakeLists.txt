@@ -33,7 +33,7 @@ add_executable(mobile_assets_backend
     src/generation/generation_tool_prompts.cpp
     src/generation/generation_task_store.cpp
     src/generation/generation_template_workflow.cpp
-    src/local_tools/local_tool_runner.cpp
+    src/local_tools/remove_objects_mask_runner.cpp
     src/local_tools/remove_background_runner.cpp
     src/local_tools/remove_objects_cleanup_runner.cpp
     src/local_tools/remove_objects_runner.cpp

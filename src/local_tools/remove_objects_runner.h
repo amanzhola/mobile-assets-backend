@@ -3,7 +3,7 @@
 #include "../comfy/comfy_client.h"
 #include "../comfy/workflow_builder.h"
 #include "../output_service.h"
-#include "local_tool_runner.h"
+#include "remove_objects_mask_runner.h"
 
 #include <boost/json.hpp>
 
@@ -27,7 +27,7 @@ public:
         comfy::ComfyClient& comfy_client,
         comfy::WorkflowBuilder& workflow_builder,
         output::OutputService& output_service,
-        LocalToolRunner& local_tool_runner
+        RemoveObjectsMaskRunner& remove_objects_mask_runner
     );
 
     std::optional<std::string> Run(
@@ -52,7 +52,7 @@ private:
     comfy::ComfyClient& comfy_client_;
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
-    LocalToolRunner& local_tool_runner_;
+    RemoveObjectsMaskRunner& remove_objects_mask_runner_;
 };
 
 }  // namespace local_tools

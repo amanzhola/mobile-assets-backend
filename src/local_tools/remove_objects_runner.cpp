@@ -16,7 +16,7 @@ RemoveObjectsRunner::RemoveObjectsRunner(
     comfy::ComfyClient& comfy_client,
     comfy::WorkflowBuilder& workflow_builder,
     output::OutputService& output_service,
-    LocalToolRunner& local_tool_runner
+    RemoveObjectsMaskRunner& remove_objects_mask_runner
 )
     : project_root_{std::move(project_root)}
     , backend_input_dir_{std::move(backend_input_dir)}
@@ -25,7 +25,7 @@ RemoveObjectsRunner::RemoveObjectsRunner(
     , comfy_client_{comfy_client}
     , workflow_builder_{workflow_builder}
     , output_service_{output_service}
-    , local_tool_runner_{local_tool_runner} {}
+    , remove_objects_mask_runner_{remove_objects_mask_runner} {}
 
 std::optional<std::string> RemoveObjectsRunner::FindNewestComfyOutputByPrefix(
     const std::string& output_prefix
@@ -139,7 +139,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
             << std::endl;
 
         auto mask_file_name =
-            local_tool_runner_.CreateRemoveObjectsMask(
+            remove_objects_mask_runner_.CreateRemoveObjectsMask(
                 task_id,
                 image_index,
                 input_file_name,

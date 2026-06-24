@@ -1,4 +1,4 @@
-#include "local_tool_runner.h"
+#include "remove_objects_mask_runner.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -6,7 +6,7 @@
 
 namespace local_tools {
 
-LocalToolRunner::LocalToolRunner(
+RemoveObjectsMaskRunner::RemoveObjectsMaskRunner(
     fs::path project_root,
     fs::path backend_input_dir,
     output::OutputService& output_service
@@ -15,7 +15,7 @@ LocalToolRunner::LocalToolRunner(
     , backend_input_dir_{std::move(backend_input_dir)}
     , output_service_{output_service} {}
 
-std::string LocalToolRunner::ReadOptionString(
+std::string RemoveObjectsMaskRunner::ReadOptionString(
     const json::object& request,
     const std::string& key
 ) const {
@@ -35,7 +35,7 @@ std::string LocalToolRunner::ReadOptionString(
     return std::string(value_it->value().as_string());
 }
 
-std::string LocalToolRunner::ReadStringOrEmpty(
+std::string RemoveObjectsMaskRunner::ReadStringOrEmpty(
     const json::object& request,
     const std::string& key
 ) const {
@@ -48,7 +48,7 @@ std::string LocalToolRunner::ReadStringOrEmpty(
     return std::string(it->value().as_string());
 }
 
-std::optional<std::string> LocalToolRunner::CreateRemoveObjectsMask(
+std::optional<std::string> RemoveObjectsMaskRunner::CreateRemoveObjectsMask(
     const std::string& task_id,
     int image_index,
     const std::string& input_file_name,

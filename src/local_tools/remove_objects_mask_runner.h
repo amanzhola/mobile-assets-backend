@@ -13,9 +13,9 @@ namespace local_tools {
 namespace json = boost::json;
 namespace fs = std::filesystem;
 
-class LocalToolRunner {
+class RemoveObjectsMaskRunner {
 public:
-    LocalToolRunner(
+    RemoveObjectsMaskRunner(
         fs::path project_root,
         fs::path backend_input_dir,
         output::OutputService& output_service
