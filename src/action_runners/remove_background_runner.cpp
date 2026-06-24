@@ -18,10 +18,11 @@ RemoveBackgroundRunner::RemoveBackgroundRunner(
 std::optional<std::string> RemoveBackgroundRunner::Run(
     const std::string& task_id,
     const std::string& input_file_name,
-    const std::string& background_mode
+    const std::string& mode,
+    const std::function<void(int)>& update_progress
 ) {
     const std::string final_mode =
-        background_mode == "transparent" ? "transparent" : "white";
+        mode == "transparent" ? "transparent" : "white";
 
     const fs::path input_file =
         backend_input_dir_ / input_file_name;
@@ -34,6 +35,8 @@ std::optional<std::string> RemoveBackgroundRunner::Run(
 
         return std::nullopt;
     }
+
+    update_progress(10);
 
     const std::string output_name =
         "pixo_remove_background_" + task_id + ".png";
@@ -53,6 +56,8 @@ std::optional<std::string> RemoveBackgroundRunner::Run(
         << "command=" << command << "\n"
         << std::endl;
 
+    update_progress(40);
+
     const int result =
         std::system(command.c_str());
 
@@ -68,6 +73,9 @@ std::optional<std::string> RemoveBackgroundRunner::Run(
 
         return std::nullopt;
     }
+
+    update_progress(85);
+    update_progress(95);
 
     return output_service_.GetPublicUrl(output_name);
 }

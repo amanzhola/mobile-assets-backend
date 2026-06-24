@@ -5,6 +5,7 @@
 #include <boost/json.hpp>
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -24,7 +25,8 @@ public:
     std::optional<std::string> Run(
         const std::string& task_id,
         const std::string& input_file_name,
-        const std::string& background_mode
+        const std::string& background_mode,
+        const std::function<void(int)>& update_progress
     );
 
 private:

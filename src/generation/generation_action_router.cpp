@@ -148,7 +148,8 @@ std::vector<std::string> GenerationActionRouter::Run(
                 remove_background_runner_.Run(
                     task_id,
                     input_file_names.front(),
-                    mode
+                    mode,
+                    update_progress
                 )
             );
 
