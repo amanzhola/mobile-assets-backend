@@ -1,33 +1,29 @@
-#include "remove_objects_runner.h"
+#include "tool_action_runner.h"
 
 #include "../generation/generation_json.h"
+#include "../generation/generation_tool_prompts.h"
 
-#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 
-namespace local_tools {
+namespace action_runners {
 
-RemoveObjectsRunner::RemoveObjectsRunner(
-    fs::path project_root,
+ToolActionRunner::ToolActionRunner(
     fs::path backend_input_dir,
     fs::path comfy_input_dir,
     fs::path comfy_output_dir,
     comfy::ComfyClient& comfy_client,
     comfy::WorkflowBuilder& workflow_builder,
-    output::OutputService& output_service,
-    RemoveObjectsMaskRunner& remove_objects_mask_runner
+    output::OutputService& output_service
 )
-    : project_root_{std::move(project_root)}
-    , backend_input_dir_{std::move(backend_input_dir)}
+    : backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
     , comfy_output_dir_{std::move(comfy_output_dir)}
     , comfy_client_{comfy_client}
     , workflow_builder_{workflow_builder}
-    , output_service_{output_service}
-    , remove_objects_mask_runner_{remove_objects_mask_runner} {}
+    , output_service_{output_service} {}
 
-std::optional<std::string> RemoveObjectsRunner::FindNewestComfyOutputByPrefix(
+std::optional<std::string> ToolActionRunner::FindNewestComfyOutputByPrefix(
     const std::string& output_prefix
 ) const {
     try {
@@ -72,8 +68,9 @@ std::optional<std::string> RemoveObjectsRunner::FindNewestComfyOutputByPrefix(
     }
 }
 
-std::optional<std::string> RemoveObjectsRunner::Run(
+std::optional<std::string> ToolActionRunner::Run(
     const json::object& request,
+    const std::string& server_action,
     const std::string& input_file_name,
     const std::string& task_id,
     int image_index,
@@ -81,8 +78,9 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 ) {
     try {
         std::cout
-            << "[REMOVE_OBJECTS_RUNNER_START]\n"
+            << "[TOOL_ACTION_RUNNER_START]\n"
             << "taskId=" << task_id << "\n"
+            << "serverAction=" << server_action << "\n"
             << "inputFileName=" << input_file_name << "\n"
             << "imageIndex=" << image_index << "\n"
             << std::endl;
@@ -97,7 +95,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 
         if (!fs::exists(backend_input_file)) {
             std::cout
-                << "[REMOVE_OBJECTS_INPUT_MISSING]\n"
+                << "[TOOL_ACTION_INPUT_MISSING]\n"
                 << "file=" << backend_input_file.string() << "\n"
                 << std::endl;
 
@@ -120,7 +118,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 
         if (!uploaded) {
             std::cout
-                << "[REMOVE_OBJECTS_UPLOAD_FAILED]\n"
+                << "[TOOL_ACTION_UPLOAD_FAILED]\n"
                 << "file=" << backend_input_file.string() << "\n"
                 << std::endl;
 
@@ -130,80 +128,29 @@ std::optional<std::string> RemoveObjectsRunner::Run(
         update_progress(20);
 
         const std::string output_prefix =
-            "pixo_remove_objects_" + task_id + "_" +
+            "pixo_" + server_action + "_" + task_id + "_" +
             std::to_string(image_index);
 
-        std::cout
-            << "[REMOVE_OBJECTS_OUTPUT_PREFIX]\n"
-            << "outputPrefix=" << output_prefix << "\n"
-            << std::endl;
-
-        auto mask_file_name =
-            remove_objects_mask_runner_.CreateRemoveObjectsMask(
-                task_id,
-                image_index,
-                input_file_name,
-                request
-            );
-
-        if (!mask_file_name) {
-            std::cout
-                << "[REMOVE_OBJECTS_MASK_FAILED]\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        const fs::path backend_mask_file =
-            backend_input_dir_ / *mask_file_name;
-
-        const fs::path comfy_mask_file =
-            comfy_input_dir_ / *mask_file_name;
-
-        if (!fs::exists(backend_mask_file)) {
-            std::cout
-                << "[REMOVE_OBJECTS_MASK_MISSING]\n"
-                << "mask=" << backend_mask_file.string() << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        fs::copy_file(
-            backend_mask_file,
-            comfy_mask_file,
-            fs::copy_options::overwrite_existing
-        );
-
-        const bool mask_uploaded =
-            comfy_client_.UploadImage(
-                backend_mask_file,
-                *mask_file_name
-            );
-
-        if (!mask_uploaded) {
-            std::cout
-                << "[REMOVE_OBJECTS_MASK_UPLOAD_FAILED]\n"
-                << "mask=" << backend_mask_file.string() << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
         const std::string positive_prompt =
-            "remove only the selected masked object, fill the removed area by matching the surrounding pixels, same colors, same lighting, same texture, seamless realistic photo";
+            generation::BuildToolPositivePrompt(
+                request,
+                server_action,
+                generation::ReadStringOrEmpty(request, "prompt")
+            );
+
+        const double denoise =
+            generation::ResolveToolDenoise(server_action);
 
         json::object workflow =
-            workflow_builder_.BuildRemoveObjectsInpaintWorkflow(
+            workflow_builder_.BuildToolWorkflow(
                 input_file_name,
-                *mask_file_name,
                 output_prefix,
                 positive_prompt,
-                0.48
+                denoise
             );
 
         std::cout
-            << "[REMOVE_OBJECTS_COMFY_WORKFLOW_JSON]\n"
+            << "[TOOL_ACTION_WORKFLOW_JSON]\n"
             << json::serialize(workflow)
             << "\n"
             << std::endl;
@@ -213,16 +160,11 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 
         if (!prompt_id) {
             std::cout
-                << "[REMOVE_OBJECTS_QUEUE_FAILED]\n"
+                << "[TOOL_ACTION_QUEUE_FAILED]\n"
                 << std::endl;
 
             return std::nullopt;
         }
-
-        std::cout
-            << "[REMOVE_OBJECTS_PROMPT_QUEUED]\n"
-            << "promptId=" << *prompt_id << "\n"
-            << std::endl;
 
         update_progress(30);
         update_progress(40);
@@ -239,7 +181,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
             !comfy_output_file_name->starts_with(output_prefix)
         ) {
             std::cout
-                << "[REMOVE_OBJECTS_PREFIX_MISMATCH]\n"
+                << "[TOOL_ACTION_PREFIX_MISMATCH]\n"
                 << "expected=" << output_prefix << "\n"
                 << "actual=" << *comfy_output_file_name << "\n"
                 << std::endl;
@@ -254,7 +196,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 
         if (!comfy_output_file_name) {
             std::cout
-                << "[REMOVE_OBJECTS_NO_OUTPUT]\n"
+                << "[TOOL_ACTION_NO_OUTPUT]\n"
                 << std::endl;
 
             return std::nullopt;
@@ -274,7 +216,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 
             if (!downloaded) {
                 std::cout
-                    << "[REMOVE_OBJECTS_DOWNLOAD_FAILED]\n"
+                    << "[TOOL_ACTION_DOWNLOAD_FAILED]\n"
                     << "file=" << *comfy_output_file_name << "\n"
                     << std::endl;
 
@@ -282,48 +224,10 @@ std::optional<std::string> RemoveObjectsRunner::Run(
             }
         }
 
-        const fs::path composited_file =
-            comfy_output_dir_ /
-            ("final_" + *comfy_output_file_name);
-
-        const std::string composite_command =
-            "cd \"" + project_root_.string() + "\" && "
-            ".venv-tools/bin/python3 scripts/apply_inpaint_mask.py "
-            "\"" + backend_input_file.string() + "\" "
-            "\"" + local_comfy_output_file.string() + "\" "
-            "\"" + backend_mask_file.string() + "\" "
-            "\"" + composited_file.string() + "\"";
-
-        std::cout
-            << "[REMOVE_OBJECTS_POST_COMPOSITE_START]\n"
-            << "command=" << composite_command << "\n"
-            << std::endl;
-
-        const int composite_result =
-            std::system(composite_command.c_str());
-
-        if (
-            composite_result != 0 ||
-            !fs::exists(composited_file) ||
-            fs::file_size(composited_file) == 0
-        ) {
-            std::cout
-                << "[REMOVE_OBJECTS_POST_COMPOSITE_FAILED]\n"
-                << "result=" << composite_result << "\n"
-                << std::endl;
-
-            return std::nullopt;
-        }
-
-        std::cout
-            << "[REMOVE_OBJECTS_POST_COMPOSITE_OK]\n"
-            << "file=" << composited_file.string() << "\n"
-            << std::endl;
-
         update_progress(92);
 
         const fs::path saved_output_file =
-            output_service_.SaveFromComfyOutput(composited_file);
+            output_service_.SaveFromComfyOutput(local_comfy_output_file);
 
         update_progress(95);
 
@@ -333,8 +237,9 @@ std::optional<std::string> RemoveObjectsRunner::Run(
             );
 
         std::cout
-            << "[REMOVE_OBJECTS_SUCCESS]\n"
+            << "[TOOL_ACTION_SUCCESS]\n"
             << "taskId=" << task_id << "\n"
+            << "serverAction=" << server_action << "\n"
             << "publicUrl=" << public_url << "\n"
             << std::endl;
 
@@ -342,8 +247,9 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 
     } catch (const std::exception& e) {
         std::cout
-            << "[REMOVE_OBJECTS_EXCEPTION]\n"
+            << "[TOOL_ACTION_EXCEPTION]\n"
             << "taskId=" << task_id << "\n"
+            << "serverAction=" << server_action << "\n"
             << "message=" << e.what() << "\n"
             << std::endl;
 
@@ -351,4 +257,4 @@ std::optional<std::string> RemoveObjectsRunner::Run(
     }
 }
 
-}  // namespace local_tools
+}  // namespace action_runners

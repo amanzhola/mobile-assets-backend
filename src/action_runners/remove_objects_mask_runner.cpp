@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <iostream>
 
-namespace local_tools {
+namespace action_runners {
 
 RemoveObjectsMaskRunner::RemoveObjectsMaskRunner(
     fs::path project_root,
@@ -132,4 +132,4 @@ std::optional<std::string> RemoveObjectsMaskRunner::CreateRemoveObjectsMask(
     return mask_file_name;
 }
 
-}  // namespace local_tools
+}  // namespace action_runners

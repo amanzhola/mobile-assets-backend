@@ -33,15 +33,15 @@ add_executable(mobile_assets_backend
     src/generation/generation_tool_prompts.cpp
     src/generation/generation_task_store.cpp
     src/generation/generation_template_workflow.cpp
-    src/local_tools/remove_objects_mask_runner.cpp
-    src/local_tools/remove_background_runner.cpp
-    src/local_tools/remove_objects_cleanup_runner.cpp
-    src/local_tools/remove_objects_runner.cpp
-    src/local_tools/ai_enhancer_runner.cpp
-    src/local_tools/template_runner.cpp
-    src/local_tools/tool_action_runner.cpp
-    src/local_tools/prompt_runner.cpp
-    src/local_tools/upscale_runner.cpp
+    src/action_runners/remove_objects_mask_runner.cpp
+    src/action_runners/remove_background_runner.cpp
+    src/action_runners/remove_objects_cleanup_runner.cpp
+    src/action_runners/remove_objects_runner.cpp
+    src/action_runners/ai_enhancer_runner.cpp
+    src/action_runners/template_runner.cpp
+    src/action_runners/tool_action_runner.cpp
+    src/action_runners/prompt_runner.cpp
+    src/action_runners/upscale_runner.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE

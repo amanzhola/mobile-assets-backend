@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace local_tools {
+namespace action_runners {
 
 namespace {
 
@@ -150,4 +150,4 @@ std::optional<std::string> UpscaleRunner::Run(
     }
 }
 
-}  // namespace local_tools
+}  // namespace action_runners

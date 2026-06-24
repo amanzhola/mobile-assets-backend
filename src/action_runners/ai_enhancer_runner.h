@@ -11,14 +11,14 @@
 #include <optional>
 #include <string>
 
-namespace local_tools {
+namespace action_runners {
 
 namespace json = boost::json;
 namespace fs = std::filesystem;
 
-class ToolActionRunner {
+class AiEnhancerRunner {
 public:
-    ToolActionRunner(
+    AiEnhancerRunner(
         fs::path backend_input_dir,
         fs::path comfy_input_dir,
         fs::path comfy_output_dir,
@@ -28,11 +28,10 @@ public:
     );
 
     std::optional<std::string> Run(
-        const json::object& request,
-        const std::string& server_action,
         const std::string& input_file_name,
         const std::string& task_id,
         int image_index,
+        const std::string& enhance_mode,
         const std::function<void(int)>& update_progress
     );
 
@@ -51,4 +50,4 @@ private:
     output::OutputService& output_service_;
 };
 
-}  // namespace local_tools
+}  // namespace action_runners

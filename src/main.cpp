@@ -7,7 +7,7 @@
 #include "template_asset_service.h"
 #include "comfy/comfy_client.h"
 #include "comfy/workflow_builder.h"
-#include "local_tools/remove_objects_mask_runner.h"
+#include "action_runners/remove_objects_mask_runner.h"
 
 #include <boost/asio.hpp>
 
@@ -71,7 +71,7 @@ int main() {
             throw std::runtime_error("HOME environment variable is not set");
         }
         
-        local_tools::RemoveObjectsMaskRunner remove_objects_mask_runner{
+        action_runners::RemoveObjectsMaskRunner remove_objects_mask_runner{
 		    root,
 		    backend_input_dir,
 		    output_service

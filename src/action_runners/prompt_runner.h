@@ -8,15 +8,16 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
-namespace local_tools {
+namespace action_runners {
 
 namespace json = boost::json;
 namespace fs = std::filesystem;
 
-class UpscaleRunner {
+class PromptRunner {
 public:
-    UpscaleRunner(
+    PromptRunner(
         fs::path project_root,
         fs::path backend_input_dir,
         output::OutputService& output_service
@@ -24,7 +25,7 @@ public:
 
     std::optional<std::string> Run(
         const json::object& request,
-        const std::string& input_file_name,
+        const std::vector<std::string>& input_file_names,
         const std::string& task_id,
         const std::function<void(int)>& update_progress
     );
@@ -35,4 +36,4 @@ private:
     output::OutputService& output_service_;
 };
 
-}  // namespace local_tools
+}  // namespace action_runners

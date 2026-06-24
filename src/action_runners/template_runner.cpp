@@ -8,7 +8,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace local_tools {
+namespace action_runners {
 
 TemplateRunner::TemplateRunner(
     fs::path templates_file,
@@ -311,4 +311,4 @@ std::optional<std::string> TemplateRunner::Run(
     }
 }
 
-}  // namespace local_tools
+}  // namespace action_runners

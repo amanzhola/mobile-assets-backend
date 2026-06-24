@@ -5,15 +5,15 @@
 #include "output_service.h"
 #include "template_asset_service.h"
 #include "generation/generation_task_store.h"
-#include "local_tools/remove_objects_mask_runner.h"
-#include "local_tools/remove_background_runner.h"
-#include "local_tools/remove_objects_cleanup_runner.h"
-#include "local_tools/remove_objects_runner.h"
-#include "local_tools/ai_enhancer_runner.h"
-#include "local_tools/template_runner.h"
-#include "local_tools/tool_action_runner.h"
-#include "local_tools/prompt_runner.h"
-#include "local_tools/upscale_runner.h"
+#include "action_runners/remove_objects_mask_runner.h"
+#include "action_runners/remove_background_runner.h"
+#include "action_runners/remove_objects_cleanup_runner.h"
+#include "action_runners/remove_objects_runner.h"
+#include "action_runners/ai_enhancer_runner.h"
+#include "action_runners/template_runner.h"
+#include "action_runners/tool_action_runner.h"
+#include "action_runners/prompt_runner.h"
+#include "action_runners/upscale_runner.h"
 
 #include <boost/json.hpp>
 
@@ -39,7 +39,7 @@ public:
         comfy::WorkflowBuilder& workflow_builder,
         output::OutputService& output_service,
         templates::TemplateAssetService& template_asset_service,
-        local_tools::RemoveObjectsMaskRunner& remove_objects_mask_runner,
+        action_runners::RemoveObjectsMaskRunner& remove_objects_mask_runner,
         fs::path backend_input_dir,
         fs::path comfy_input_dir,
         fs::path comfy_output_dir
@@ -111,20 +111,20 @@ private:
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
     templates::TemplateAssetService& template_asset_service_;
-    local_tools::RemoveObjectsMaskRunner& remove_objects_mask_runner_;
+    action_runners::RemoveObjectsMaskRunner& remove_objects_mask_runner_;
 
     fs::path backend_input_dir_;
     fs::path comfy_input_dir_;
     fs::path comfy_output_dir_;
     
-    local_tools::RemoveBackgroundRunner remove_background_runner_;
-    local_tools::AiEnhancerRunner ai_enhancer_runner_;
-    local_tools::RemoveObjectsRunner remove_objects_runner_;
-	local_tools::RemoveObjectsCleanupRunner remove_objects_cleanup_runner_;
-	local_tools::TemplateRunner template_runner_;
-	local_tools::ToolActionRunner tool_action_runner_;
-	local_tools::PromptRunner prompt_runner_;
-	local_tools::UpscaleRunner upscale_runner_;
+    action_runners::RemoveBackgroundRunner remove_background_runner_;
+    action_runners::AiEnhancerRunner ai_enhancer_runner_;
+    action_runners::RemoveObjectsRunner remove_objects_runner_;
+	action_runners::RemoveObjectsCleanupRunner remove_objects_cleanup_runner_;
+	action_runners::TemplateRunner template_runner_;
+	action_runners::ToolActionRunner tool_action_runner_;
+	action_runners::PromptRunner prompt_runner_;
+	action_runners::UpscaleRunner upscale_runner_;
 };
 
 }  // namespace generation

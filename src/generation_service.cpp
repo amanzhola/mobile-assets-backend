@@ -23,7 +23,7 @@ GenerationService::GenerationService(
     comfy::WorkflowBuilder& workflow_builder,
     output::OutputService& output_service,
     templates::TemplateAssetService& template_asset_service,
-    local_tools::RemoveObjectsMaskRunner& remove_objects_mask_runner,
+    action_runners::RemoveObjectsMaskRunner& remove_objects_mask_runner,
     fs::path backend_input_dir,
     fs::path comfy_input_dir,
     fs::path comfy_output_dir
@@ -148,7 +148,7 @@ std::string GenerationService::ChooseWorkflow(const std::string& action) const {
 	}
 	
 	if (action == "upscale_image") {
-	    return "local_tools/upscale_image";
+	    return "action_runners/upscale_image";
 	}
 
     if (IsToolAction(action)) {

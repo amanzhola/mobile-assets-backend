@@ -1,14 +1,11 @@
-#include "tool_action_runner.h"
-
-#include "../generation/generation_json.h"
-#include "../generation/generation_tool_prompts.h"
+#include "ai_enhancer_runner.h"
 
 #include <filesystem>
 #include <iostream>
 
-namespace local_tools {
+namespace action_runners {
 
-ToolActionRunner::ToolActionRunner(
+AiEnhancerRunner::AiEnhancerRunner(
     fs::path backend_input_dir,
     fs::path comfy_input_dir,
     fs::path comfy_output_dir,
@@ -23,7 +20,7 @@ ToolActionRunner::ToolActionRunner(
     , workflow_builder_{workflow_builder}
     , output_service_{output_service} {}
 
-std::optional<std::string> ToolActionRunner::FindNewestComfyOutputByPrefix(
+std::optional<std::string> AiEnhancerRunner::FindNewestComfyOutputByPrefix(
     const std::string& output_prefix
 ) const {
     try {
@@ -68,21 +65,20 @@ std::optional<std::string> ToolActionRunner::FindNewestComfyOutputByPrefix(
     }
 }
 
-std::optional<std::string> ToolActionRunner::Run(
-    const json::object& request,
-    const std::string& server_action,
+std::optional<std::string> AiEnhancerRunner::Run(
     const std::string& input_file_name,
     const std::string& task_id,
     int image_index,
+    const std::string& enhance_mode,
     const std::function<void(int)>& update_progress
 ) {
     try {
         std::cout
-            << "[TOOL_ACTION_RUNNER_START]\n"
+            << "[AI_ENHANCER_RUNNER_START]\n"
             << "taskId=" << task_id << "\n"
-            << "serverAction=" << server_action << "\n"
             << "inputFileName=" << input_file_name << "\n"
             << "imageIndex=" << image_index << "\n"
+            << "enhanceMode=" << enhance_mode << "\n"
             << std::endl;
 
         fs::create_directories(comfy_input_dir_);
@@ -95,7 +91,7 @@ std::optional<std::string> ToolActionRunner::Run(
 
         if (!fs::exists(backend_input_file)) {
             std::cout
-                << "[TOOL_ACTION_INPUT_MISSING]\n"
+                << "[AI_ENHANCER_INPUT_MISSING]\n"
                 << "file=" << backend_input_file.string() << "\n"
                 << std::endl;
 
@@ -118,7 +114,7 @@ std::optional<std::string> ToolActionRunner::Run(
 
         if (!uploaded) {
             std::cout
-                << "[TOOL_ACTION_UPLOAD_FAILED]\n"
+                << "[AI_ENHANCER_UPLOAD_FAILED]\n"
                 << "file=" << backend_input_file.string() << "\n"
                 << std::endl;
 
@@ -128,29 +124,18 @@ std::optional<std::string> ToolActionRunner::Run(
         update_progress(20);
 
         const std::string output_prefix =
-            "pixo_" + server_action + "_" + task_id + "_" +
+            "pixo_ai_enhancer_" + task_id + "_" +
             std::to_string(image_index);
 
-        const std::string positive_prompt =
-            generation::BuildToolPositivePrompt(
-                request,
-                server_action,
-                generation::ReadStringOrEmpty(request, "prompt")
-            );
-
-        const double denoise =
-            generation::ResolveToolDenoise(server_action);
-
         json::object workflow =
-            workflow_builder_.BuildToolWorkflow(
+            workflow_builder_.BuildAiEnhancerWorkflow(
                 input_file_name,
                 output_prefix,
-                positive_prompt,
-                denoise
+                enhance_mode
             );
 
         std::cout
-            << "[TOOL_ACTION_WORKFLOW_JSON]\n"
+            << "[AI_ENHANCER_WORKFLOW_JSON]\n"
             << json::serialize(workflow)
             << "\n"
             << std::endl;
@@ -160,7 +145,7 @@ std::optional<std::string> ToolActionRunner::Run(
 
         if (!prompt_id) {
             std::cout
-                << "[TOOL_ACTION_QUEUE_FAILED]\n"
+                << "[AI_ENHANCER_QUEUE_FAILED]\n"
                 << std::endl;
 
             return std::nullopt;
@@ -181,7 +166,7 @@ std::optional<std::string> ToolActionRunner::Run(
             !comfy_output_file_name->starts_with(output_prefix)
         ) {
             std::cout
-                << "[TOOL_ACTION_PREFIX_MISMATCH]\n"
+                << "[AI_ENHANCER_PREFIX_MISMATCH]\n"
                 << "expected=" << output_prefix << "\n"
                 << "actual=" << *comfy_output_file_name << "\n"
                 << std::endl;
@@ -196,7 +181,7 @@ std::optional<std::string> ToolActionRunner::Run(
 
         if (!comfy_output_file_name) {
             std::cout
-                << "[TOOL_ACTION_NO_OUTPUT]\n"
+                << "[AI_ENHANCER_NO_OUTPUT]\n"
                 << std::endl;
 
             return std::nullopt;
@@ -216,7 +201,7 @@ std::optional<std::string> ToolActionRunner::Run(
 
             if (!downloaded) {
                 std::cout
-                    << "[TOOL_ACTION_DOWNLOAD_FAILED]\n"
+                    << "[AI_ENHANCER_DOWNLOAD_FAILED]\n"
                     << "file=" << *comfy_output_file_name << "\n"
                     << std::endl;
 
@@ -237,9 +222,8 @@ std::optional<std::string> ToolActionRunner::Run(
             );
 
         std::cout
-            << "[TOOL_ACTION_SUCCESS]\n"
+            << "[AI_ENHANCER_SUCCESS]\n"
             << "taskId=" << task_id << "\n"
-            << "serverAction=" << server_action << "\n"
             << "publicUrl=" << public_url << "\n"
             << std::endl;
 
@@ -247,9 +231,8 @@ std::optional<std::string> ToolActionRunner::Run(
 
     } catch (const std::exception& e) {
         std::cout
-            << "[TOOL_ACTION_EXCEPTION]\n"
+            << "[AI_ENHANCER_EXCEPTION]\n"
             << "taskId=" << task_id << "\n"
-            << "serverAction=" << server_action << "\n"
             << "message=" << e.what() << "\n"
             << std::endl;
 
@@ -257,4 +240,4 @@ std::optional<std::string> ToolActionRunner::Run(
     }
 }
 
-}  // namespace local_tools
+}  // namespace action_runners

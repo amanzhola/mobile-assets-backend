@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace local_tools {
+namespace action_runners {
 
 namespace {
 
@@ -149,4 +149,4 @@ std::optional<std::string> PromptRunner::Run(
     }
 }
 
-}  // namespace local_tools
+}  // namespace action_runners

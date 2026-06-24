@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <iostream>
 
-namespace local_tools {
+namespace action_runners {
 
 RemoveBackgroundRunner::RemoveBackgroundRunner(
     fs::path project_root,
@@ -72,4 +72,4 @@ std::optional<std::string> RemoveBackgroundRunner::Run(
     return output_service_.GetPublicUrl(output_name);
 }
 
-}  // namespace local_tools
+}  // namespace action_runners
