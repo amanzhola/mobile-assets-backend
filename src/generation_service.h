@@ -15,6 +15,7 @@
 #include "action_runners/prompt_runner.h"
 #include "action_runners/upscale_runner.h"
 #include "generation/generation_action_router.h"
+#include "action_runners/skin_improve_runner.h"
 
 #include <boost/json.hpp>
 
@@ -122,6 +123,7 @@ private:
 	action_runners::ToolActionRunner tool_action_runner_;
 	action_runners::PromptRunner prompt_runner_;
 	action_runners::UpscaleRunner upscale_runner_;
+	action_runners::SkinImproveRunner skin_improve_runner_;
 	
 	GenerationActionRouter action_router_;
 };

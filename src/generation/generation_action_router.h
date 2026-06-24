@@ -8,6 +8,7 @@
 #include "../action_runners/template_runner.h"
 #include "../action_runners/tool_action_runner.h"
 #include "../action_runners/upscale_runner.h"
+#include "../action_runners/skin_improve_runner.h"
 
 #include <boost/json.hpp>
 
@@ -30,6 +31,7 @@ public:
         action_runners::AiEnhancerRunner& ai_enhancer_runner,
         action_runners::TemplateRunner& template_runner,
         action_runners::UpscaleRunner& upscale_runner,
+        action_runners::SkinImproveRunner& skin_improve_runner,
         action_runners::ToolActionRunner& tool_action_runner,
         action_runners::PromptRunner& prompt_runner
     );
@@ -61,6 +63,7 @@ private:
     action_runners::AiEnhancerRunner& ai_enhancer_runner_;
     action_runners::TemplateRunner& template_runner_;
     action_runners::UpscaleRunner& upscale_runner_;
+    action_runners::SkinImproveRunner& skin_improve_runner_;
     action_runners::ToolActionRunner& tool_action_runner_;
     action_runners::PromptRunner& prompt_runner_;
 };

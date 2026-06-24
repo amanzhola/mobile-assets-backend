@@ -89,6 +89,14 @@ GenerationService::GenerationService(
 	    backend_input_dir_,
 	    output_service_
 	}
+	, skin_improve_runner_{
+	    backend_input_dir_,
+	    comfy_input_dir_,
+	    comfy_output_dir_,
+	    comfy_client_,
+	    workflow_builder_,
+	    output_service_
+	}
 	, action_router_{
 	    comfy_generation_mutex_,
 	    remove_background_runner_,
@@ -97,6 +105,7 @@ GenerationService::GenerationService(
 	    ai_enhancer_runner_,
 	    template_runner_,
 	    upscale_runner_,
+	    skin_improve_runner_,
 	    tool_action_runner_,
 	    prompt_runner_
 	}

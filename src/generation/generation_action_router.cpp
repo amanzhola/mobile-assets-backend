@@ -16,6 +16,7 @@ GenerationActionRouter::GenerationActionRouter(
     action_runners::AiEnhancerRunner& ai_enhancer_runner,
     action_runners::TemplateRunner& template_runner,
     action_runners::UpscaleRunner& upscale_runner,
+    action_runners::SkinImproveRunner& skin_improve_runner,
     action_runners::ToolActionRunner& tool_action_runner,
     action_runners::PromptRunner& prompt_runner
 )
@@ -26,6 +27,7 @@ GenerationActionRouter::GenerationActionRouter(
     , ai_enhancer_runner_{ai_enhancer_runner}
     , template_runner_{template_runner}
     , upscale_runner_{upscale_runner}
+    , skin_improve_runner_{skin_improve_runner}
     , tool_action_runner_{tool_action_runner}
     , prompt_runner_{prompt_runner} {}
 
@@ -251,6 +253,29 @@ std::vector<std::string> GenerationActionRouter::Run(
             )
         );
     }
+    
+    if (server_action == "skin_improve") {
+	    update_progress(1);
+	
+	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+	
+	    const auto input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    return finish(
+	        skin_improve_runner_.Run(
+	            request,
+	            input_file_names.front(),
+	            task_id,
+	            0,
+	            update_progress
+	        )
+	    );
+	}
 
     if (server_action == "prompt") {
         update_progress(1);
