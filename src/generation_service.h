@@ -14,6 +14,7 @@
 #include "action_runners/tool_action_runner.h"
 #include "action_runners/prompt_runner.h"
 #include "action_runners/upscale_runner.h"
+#include "generation/generation_action_router.h"
 
 #include <boost/json.hpp>
 
@@ -92,10 +93,6 @@ private:
         int output_count
     );
 
-    std::vector<std::string> ExtractUploadedFileNames(
-        const json::object& request
-    ) const;
-
 private:
     GenerationTaskStore task_store_;
 
@@ -125,6 +122,8 @@ private:
 	action_runners::ToolActionRunner tool_action_runner_;
 	action_runners::PromptRunner prompt_runner_;
 	action_runners::UpscaleRunner upscale_runner_;
+	
+	GenerationActionRouter action_router_;
 };
 
 }  // namespace generation

@@ -89,6 +89,17 @@ GenerationService::GenerationService(
 	    backend_input_dir_,
 	    output_service_
 	}
+	, action_router_{
+	    comfy_generation_mutex_,
+	    remove_background_runner_,
+	    remove_objects_cleanup_runner_,
+	    remove_objects_runner_,
+	    ai_enhancer_runner_,
+	    template_runner_,
+	    upscale_runner_,
+	    tool_action_runner_,
+	    prompt_runner_
+	}
     , remove_objects_cleanup_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -182,337 +193,22 @@ void DuplicateResultsToOutputCount(
     }
 }
 
-std::vector<std::string> GenerationService::ExtractUploadedFileNames(
-    const json::object& request
-) const {
-    std::vector<std::string> result;
-
-    auto single_it = request.find("sourceImageUrl");
-
-    if (single_it != request.end() && single_it->value().is_string()) {
-        auto file_name = ExtractFileNameFromUploadUrl(
-            std::string(single_it->value().as_string())
-        );
-
-        if (file_name) {
-            result.push_back(*file_name);
-        }
-    }
-
-    auto uploaded_it = request.find("uploadedImageUrls");
-
-    if (uploaded_it != request.end() && uploaded_it->value().is_array()) {
-        for (const auto& item : uploaded_it->value().as_array()) {
-            if (!item.is_string()) {
-                continue;
-            }
-
-            auto file_name = ExtractFileNameFromUploadUrl(
-                std::string(item.as_string())
-            );
-
-            if (!file_name) {
-                continue;
-            }
-
-            const bool already_exists = std::find(
-                result.begin(),
-                result.end(),
-                *file_name
-            ) != result.end();
-
-            if (!already_exists) {
-                result.push_back(*file_name);
-            }
-        }
-    }
-
-    return result;
-}
-
 std::vector<std::string> GenerationService::RunGenerationViaComfy(
     const json::object& request,
     const std::string& task_id,
     const std::string& server_action,
     int output_count
 ) {
-    std::vector<std::string> result_urls;
-    
-    if (server_action == "remove_objects_cleanup") {
-	    UpdateTaskProgress(task_id, 1);
-	
-	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
-	
-	    auto output_url =
-		    remove_objects_cleanup_runner_.Run(
-		        request,
-		        task_id,
-		        0,
-		        [this, &task_id](int progress)
-		        {
-		            UpdateTaskProgress(
-		                task_id,
-		                progress
-		            );
-		        }
-		    );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    return result_urls;
-	}
-    	
-	if (server_action == "remove_background") {
-	    const auto input_file_names =
-	        ExtractUploadedFileNames(request);
-	
-	    if (input_file_names.empty()) {
-	        return result_urls;
-	    }
-	
-	    std::string mode =
-		    ReadOptionString(request, "backgroundMode");
-		
-		if (mode.empty()) {
-		    mode = ReadOptionString(request, "backgroundType");
-		}
-		
-		if (mode.empty()) {
-		    mode = ReadOptionString(request, "type");
-		}
-		
-		std::cout
-		    << "[REMOVE_BACKGROUND_MODE]\n"
-		    << "mode=" << mode << "\n"
-		    << std::endl;
-	
-	    auto output_url =
-	        remove_background_runner_.Run(
-	            task_id,
-	            input_file_names.front(),
-	            mode
-	        );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    UpdateTaskProgress(task_id, 100);
-	
-	    return result_urls;
-	}
-	
-	if (server_action == "remove_objects") {
-	    UpdateTaskProgress(task_id, 1);
-	
-	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
-	
-	    const std::vector<std::string> input_file_names =
-	        ExtractUploadedFileNames(request);
-	
-	    if (input_file_names.empty()) {
-	        return result_urls;
-	    }
-	
-	    auto output_url =
-	        remove_objects_runner_.Run(
-	            request,
-	            input_file_names.front(),
-	            task_id,
-	            0,
-	            [this, &task_id](int progress) {
-	                UpdateTaskProgress(task_id, progress);
-	            }
-	        );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    return result_urls;
-	}
-	
-	if (server_action == "ai_enhancer") {
-	    UpdateTaskProgress(task_id, 1);
-	
-	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
-	
-	    const std::vector<std::string> input_file_names =
-	        ExtractUploadedFileNames(request);
-	
-	    if (input_file_names.empty()) {
-	        return result_urls;
-	    }
-	
-	    const std::string enhance_mode =
-	        ReadOptionString(request, "enhanceMode");
-	
-	    auto output_url =
-	        ai_enhancer_runner_.Run(
-	            input_file_names.front(),
-	            task_id,
-	            0,
-	            enhance_mode,
-	            [this, &task_id](int progress)
-	            {
-	                UpdateTaskProgress(task_id, progress);
-	            }
-	        );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    return result_urls;
-	}
-	
-	if (server_action == "template") {
-	    UpdateTaskProgress(task_id, 1);
-	
-	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
-	
-	    const std::vector<std::string> input_file_names =
-	        ExtractUploadedFileNames(request);
-	
-	    if (input_file_names.empty()) {
-	        return result_urls;
-	    }
-	
-	    const std::string template_id =
-	        ReadTemplateId(request);
-	
-	    auto output_url =
-	        template_runner_.Run(
-	            template_id,
-	            input_file_names.front(),
-	            task_id,
-	            0,
-	            [this, &task_id](int progress)
-	            {
-	                UpdateTaskProgress(task_id, progress);
-	            }
-	        );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    return result_urls;
-	}
-	
-	if (server_action == "upscale_image") {
-	    UpdateTaskProgress(task_id, 1);
-	
-	    const std::vector<std::string> input_file_names =
-	        ExtractUploadedFileNames(request);
-	
-	    if (input_file_names.empty()) {
-	        return result_urls;
-	    }
-	
-	    auto output_url =
-	        upscale_runner_.Run(
-	            request,
-	            input_file_names.front(),
-	            task_id,
-	            [this, &task_id](int progress)
-	            {
-	                UpdateTaskProgress(task_id, progress);
-	            }
-	        );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    return result_urls;
-	}
-	
-	if (IsToolAction(server_action)) {
-	    UpdateTaskProgress(task_id, 1);
-	
-	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
-	
-	    const std::vector<std::string> input_file_names =
-	        ExtractUploadedFileNames(request);
-	
-	    if (input_file_names.empty()) {
-	        return result_urls;
-	    }
-	
-	    auto output_url =
-	        tool_action_runner_.Run(
-	            request,
-	            server_action,
-	            input_file_names.front(),
-	            task_id,
-	            0,
-	            [this, &task_id](int progress)
-	            {
-	                UpdateTaskProgress(task_id, progress);
-	            }
-	        );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    return result_urls;
-	}
-		
-    if (server_action == "prompt") {
-	    UpdateTaskProgress(task_id, 1);
-	
-	    const std::vector<std::string> input_file_names =
-	        ExtractUploadedFileNames(request);
-	
-	    if (input_file_names.empty()) {
-	        return result_urls;
-	    }
-	
-	    auto output_url =
-	        prompt_runner_.Run(
-	            request,
-	            input_file_names,
-	            task_id,
-	            [this, &task_id](int progress)
-	            {
-	                UpdateTaskProgress(task_id, progress);
-	            }
-	        );
-	
-	    if (output_url) {
-	        result_urls.push_back(*output_url);
-	    }
-	
-	    DuplicateResultsToOutputCount(result_urls, output_count);
-	
-	    return result_urls;
-	}
-
-    std::cout
-        << "[UNHANDLED_GENERATION_ACTION]\n"
-        << "taskId=" << task_id << "\n"
-        << "serverAction=" << server_action << "\n"
-        << std::endl;
-
-    return result_urls;
+    return action_router_.Run(
+        request,
+        task_id,
+        server_action,
+        output_count,
+        [this, &task_id](int progress)
+        {
+            UpdateTaskProgress(task_id, progress);
+        }
+    );
 }
 
 void GenerationService::StartComfyGenerationInBackground(
