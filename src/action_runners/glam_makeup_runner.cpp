@@ -1,0 +1,410 @@
+#include "glam_makeup_runner.h"
+
+#include "../generation/generation_json.h"
+
+#include <filesystem>
+#include <iostream>
+
+namespace action_runners {
+
+namespace {
+
+std::string ReadAnyOption(
+    const json::object& request,
+    const std::vector<std::string>& keys
+) {
+    for (const auto& key : keys) {
+        std::string value =
+            generation::ReadOptionString(request, key);
+
+        if (!value.empty()) {
+            return value;
+        }
+    }
+
+    return {};
+}
+
+std::string NormalizeMakeupStyle(const std::string& raw) {
+    std::string value = raw;
+
+    for (char& ch : value) {
+        ch = static_cast<char>(std::tolower(ch));
+    }
+
+    if (
+        value == "natural_glow" ||
+        value == "natural glow" ||
+        value == "естественный" ||
+        value == "натуральный" ||
+        value == "натуральное сияние"
+    ) {
+        return "natural glowing makeup, soft healthy skin glow, subtle blush, nude lipstick";
+    }
+
+    if (
+        value == "gentle_glam" ||
+        value == "gentle glam" ||
+        value == "soft glam" ||
+        value == "мягкий гламур" ||
+        value == "легкий гламур"
+    ) {
+        return "gentle glam makeup, soft pink blush, defined lashes, nude glossy lipstick";
+    }
+
+    if (
+        value == "rich_glam" ||
+        value == "rich glam" ||
+        value == "яркий гламур" ||
+        value == "насыщенный гламур"
+    ) {
+        return "rich glam makeup, elegant contour, stronger lashes, satin lipstick, polished beauty look";
+    }
+
+    if (
+        value == "evening_look" ||
+        value == "evening look" ||
+        value == "вечерний" ||
+        value == "вечерний макияж"
+    ) {
+        return "evening makeup look, elegant eye makeup, soft smoky eyes, refined lipstick, luxury beauty portrait";
+    }
+
+    if (!raw.empty()) {
+        return raw;
+    }
+
+    return "natural glowing makeup, soft pink blush, nude lipstick";
+}
+
+std::string NormalizeMakeupDetails(const std::string& raw) {
+    std::string value = raw;
+
+    for (char& ch : value) {
+        ch = static_cast<char>(std::tolower(ch));
+    }
+
+    if (
+        value.find("нежно") != std::string::npos &&
+        value.find("роз") != std::string::npos &&
+        value.find("рум") != std::string::npos
+    ) {
+        return "soft pink blush";
+    }
+
+    if (
+        value.find("нюд") != std::string::npos ||
+        value.find("nude") != std::string::npos
+    ) {
+        return "nude lipstick";
+    }
+
+    if (
+        value.find("сия") != std::string::npos ||
+        value.find("glow") != std::string::npos
+    ) {
+        return "soft glowing skin";
+    }
+
+    return raw;
+}
+
+}  // namespace
+
+GlamMakeupRunner::GlamMakeupRunner(
+    fs::path backend_input_dir,
+    fs::path comfy_input_dir,
+    fs::path comfy_output_dir,
+    comfy::ComfyClient& comfy_client,
+    comfy::WorkflowBuilder& workflow_builder,
+    output::OutputService& output_service
+)
+    : backend_input_dir_{std::move(backend_input_dir)}
+    , comfy_input_dir_{std::move(comfy_input_dir)}
+    , comfy_output_dir_{std::move(comfy_output_dir)}
+    , comfy_client_{comfy_client}
+    , workflow_builder_{workflow_builder}
+    , output_service_{output_service} {}
+
+std::string GlamMakeupRunner::BuildPrompt(
+    const json::object& request
+) const {
+    const std::string style =
+        ReadAnyOption(
+            request,
+            {
+                "makeupStyle",
+                "glamMakeupStyle",
+                "style",
+                "makeup_style"
+            }
+        );
+
+    const std::string details =
+        ReadAnyOption(
+            request,
+            {
+                "optionalDetails",
+                "details",
+                "makeupDetails",
+                "customMakeup",
+                "description"
+            }
+        );
+
+    const std::string prompt =
+        generation::ReadStringOrEmpty(request, "prompt");
+
+    std::string makeup_prompt =
+        NormalizeMakeupStyle(style);
+
+    if (!details.empty()) {
+	    makeup_prompt += ", " + NormalizeMakeupDetails(details);
+	} else if (!prompt.empty()) {
+	    makeup_prompt += ", " + NormalizeMakeupDetails(prompt);
+	}
+
+    return
+        "apply realistic professional makeup to the same person, "
+        "preserve exact face identity, preserve facial structure, preserve skin texture, "
+        "do not change age, do not change hairstyle, do not change clothing, "
+        + makeup_prompt +
+        ", beauty photography, clean realistic face, natural lighting";
+}
+
+std::optional<std::string> GlamMakeupRunner::FindNewestComfyOutputByPrefix(
+    const std::string& output_prefix
+) const {
+    try {
+        if (!fs::exists(comfy_output_dir_)) {
+            return std::nullopt;
+        }
+
+        fs::path newest_file;
+        fs::file_time_type newest_time{};
+        bool found = false;
+
+        for (const auto& entry : fs::directory_iterator(comfy_output_dir_)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+
+            const std::string file_name =
+                entry.path().filename().string();
+
+            if (!file_name.starts_with(output_prefix)) {
+                continue;
+            }
+
+            const auto modified_time =
+                fs::last_write_time(entry.path());
+
+            if (!found || modified_time > newest_time) {
+                found = true;
+                newest_time = modified_time;
+                newest_file = entry.path();
+            }
+        }
+
+        if (!found) {
+            return std::nullopt;
+        }
+
+        return newest_file.filename().string();
+
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+std::optional<std::string> GlamMakeupRunner::Run(
+    const json::object& request,
+    const std::string& input_file_name,
+    const std::string& task_id,
+    int image_index,
+    const std::function<void(int)>& update_progress
+) {
+    try {
+        std::cout
+            << "[GLAM_MAKEUP_RUNNER_START]\n"
+            << "taskId=" << task_id << "\n"
+            << "inputFileName=" << input_file_name << "\n"
+            << "imageIndex=" << image_index << "\n"
+            << std::endl;
+
+        fs::create_directories(comfy_input_dir_);
+
+        const fs::path backend_input_file =
+            backend_input_dir_ / input_file_name;
+
+        const fs::path comfy_input_file =
+            comfy_input_dir_ / input_file_name;
+
+        if (
+            !fs::exists(backend_input_file) ||
+            fs::file_size(backend_input_file) == 0
+        ) {
+            std::cout
+                << "[GLAM_MAKEUP_INPUT_MISSING]\n"
+                << "file=" << backend_input_file.string() << "\n"
+                << std::endl;
+
+            return std::nullopt;
+        }
+
+        update_progress(10);
+
+        fs::copy_file(
+            backend_input_file,
+            comfy_input_file,
+            fs::copy_options::overwrite_existing
+        );
+
+        const bool uploaded =
+		    comfy_client_.UploadImage(
+		        backend_input_file,
+		        input_file_name
+		    );
+		
+		if (!uploaded) {
+		    std::cout
+		        << "[GLAM_MAKEUP_UPLOAD_FAILED]\n"
+		        << "file=" << backend_input_file.string() << "\n"
+		        << std::endl;
+		
+		    return std::nullopt;
+		}
+		
+		std::cout
+		    << "[GLAM_MAKEUP_UPLOAD_OK]\n"
+		    << "fileName=" << input_file_name << "\n"
+		    << std::endl;
+
+        update_progress(20);
+
+        const std::string output_prefix =
+            "pixo_glam_makeup_" + task_id + "_" +
+            std::to_string(image_index);
+
+        const std::string positive_prompt =
+            BuildPrompt(request);
+
+        const double denoise = 0.34;
+
+        json::object workflow =
+            workflow_builder_.BuildToolWorkflow(
+                input_file_name,
+                output_prefix,
+                positive_prompt,
+                denoise
+            );
+
+        std::cout
+            << "[GLAM_MAKEUP_WORKFLOW_JSON]\n"
+            << json::serialize(workflow)
+            << "\n"
+            << std::endl;
+
+        auto prompt_id =
+            comfy_client_.QueuePrompt(workflow);
+
+        if (!prompt_id) {
+            std::cout
+                << "[GLAM_MAKEUP_QUEUE_FAILED]\n"
+                << std::endl;
+
+            return std::nullopt;
+        }
+
+        update_progress(30);
+        update_progress(40);
+
+        auto comfy_output_file_name =
+            comfy_client_.WaitForFirstOutputFile(
+                *prompt_id,
+                240,
+                1000
+            );
+
+        if (
+            comfy_output_file_name &&
+            !comfy_output_file_name->starts_with(output_prefix)
+        ) {
+            std::cout
+                << "[GLAM_MAKEUP_PREFIX_MISMATCH]\n"
+                << "expected=" << output_prefix << "\n"
+                << "actual=" << *comfy_output_file_name << "\n"
+                << std::endl;
+
+            comfy_output_file_name = std::nullopt;
+        }
+
+        if (!comfy_output_file_name) {
+            comfy_output_file_name =
+                FindNewestComfyOutputByPrefix(output_prefix);
+        }
+
+        if (!comfy_output_file_name) {
+            std::cout
+                << "[GLAM_MAKEUP_NO_OUTPUT]\n"
+                << std::endl;
+
+            return std::nullopt;
+        }
+
+        update_progress(85);
+
+        const fs::path local_comfy_output_file =
+            comfy_output_dir_ / *comfy_output_file_name;
+
+        if (!fs::exists(local_comfy_output_file)) {
+            const bool downloaded =
+                comfy_client_.DownloadOutputImage(
+                    *comfy_output_file_name,
+                    local_comfy_output_file
+                );
+
+            if (!downloaded) {
+                std::cout
+                    << "[GLAM_MAKEUP_DOWNLOAD_FAILED]\n"
+                    << "file=" << *comfy_output_file_name << "\n"
+                    << std::endl;
+
+                return std::nullopt;
+            }
+        }
+
+        update_progress(92);
+
+        const fs::path saved_output_file =
+            output_service_.SaveFromComfyOutput(
+                local_comfy_output_file
+            );
+
+        update_progress(95);
+
+        const std::string public_url =
+            output_service_.GetPublicUrl(
+                saved_output_file.filename().string()
+            );
+
+        std::cout
+            << "[GLAM_MAKEUP_SUCCESS]\n"
+            << "taskId=" << task_id << "\n"
+            << "publicUrl=" << public_url << "\n"
+            << std::endl;
+
+        return public_url;
+
+    } catch (const std::exception& e) {
+        std::cout
+            << "[GLAM_MAKEUP_EXCEPTION]\n"
+            << "taskId=" << task_id << "\n"
+            << "message=" << e.what() << "\n"
+            << std::endl;
+
+        return std::nullopt;
+    }
+}
+
+}  // namespace action_runners

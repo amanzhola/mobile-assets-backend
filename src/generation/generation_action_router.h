@@ -10,6 +10,7 @@
 #include "../action_runners/upscale_runner.h"
 #include "../action_runners/skin_improve_runner.h"
 #include "../action_runners/smile_edit_runner.h"
+#include "../action_runners/glam_makeup_runner.h"
 
 #include <boost/json.hpp>
 
@@ -34,6 +35,7 @@ public:
         action_runners::UpscaleRunner& upscale_runner,
         action_runners::SkinImproveRunner& skin_improve_runner,
         action_runners::SmileEditRunner& smile_edit_runner,
+        action_runners::GlamMakeupRunner& glam_makeup_runner,
         action_runners::ToolActionRunner& tool_action_runner,
         action_runners::PromptRunner& prompt_runner
     );
@@ -67,6 +69,7 @@ private:
     action_runners::UpscaleRunner& upscale_runner_;
     action_runners::SkinImproveRunner& skin_improve_runner_;
     action_runners::SmileEditRunner& smile_edit_runner_;
+    action_runners::GlamMakeupRunner& glam_makeup_runner_;
     action_runners::ToolActionRunner& tool_action_runner_;
     action_runners::PromptRunner& prompt_runner_;
 };

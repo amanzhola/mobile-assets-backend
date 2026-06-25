@@ -105,6 +105,14 @@ GenerationService::GenerationService(
 	    workflow_builder_,
 	    output_service_
 	}
+	, glam_makeup_runner_{
+	    backend_input_dir_,
+	    comfy_input_dir_,
+	    comfy_output_dir_,
+	    comfy_client_,
+	    workflow_builder_,
+	    output_service_
+	}
 	, action_router_{
 	    comfy_generation_mutex_,
 	    remove_background_runner_,
@@ -115,6 +123,7 @@ GenerationService::GenerationService(
 	    upscale_runner_,
 	    skin_improve_runner_,
 	    smile_edit_runner_,
+	    glam_makeup_runner_,
 	    tool_action_runner_,
 	    prompt_runner_
 	}

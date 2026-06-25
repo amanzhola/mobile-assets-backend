@@ -44,6 +44,7 @@ add_executable(mobile_assets_backend
     src/generation/generation_action_router.cpp
     src/action_runners/skin_improve_runner.cpp
     src/action_runners/smile_edit_runner.cpp
+    src/action_runners/glam_makeup_runner.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE

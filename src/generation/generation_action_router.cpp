@@ -18,6 +18,7 @@ GenerationActionRouter::GenerationActionRouter(
     action_runners::UpscaleRunner& upscale_runner,
     action_runners::SkinImproveRunner& skin_improve_runner,
     action_runners::SmileEditRunner& smile_edit_runner,
+    action_runners::GlamMakeupRunner& glam_makeup_runner,
     action_runners::ToolActionRunner& tool_action_runner,
     action_runners::PromptRunner& prompt_runner
 )
@@ -30,6 +31,7 @@ GenerationActionRouter::GenerationActionRouter(
     , upscale_runner_{upscale_runner}
     , skin_improve_runner_{skin_improve_runner}
     , smile_edit_runner_{smile_edit_runner}
+    , glam_makeup_runner_{glam_makeup_runner}
     , tool_action_runner_{tool_action_runner}
     , prompt_runner_{prompt_runner} {}
 
@@ -293,6 +295,29 @@ std::vector<std::string> GenerationActionRouter::Run(
 	
 	    return finish(
 	        smile_edit_runner_.Run(
+	            request,
+	            input_file_names.front(),
+	            task_id,
+	            0,
+	            update_progress
+	        )
+	    );
+	}
+	
+	if (server_action == "glam_makeup") {
+	    update_progress(1);
+	
+	    std::lock_guard<std::mutex> comfy_lock(comfy_generation_mutex_);
+	
+	    const auto input_file_names =
+	        ExtractUploadedFileNames(request);
+	
+	    if (input_file_names.empty()) {
+	        return result_urls;
+	    }
+	
+	    return finish(
+	        glam_makeup_runner_.Run(
 	            request,
 	            input_file_names.front(),
 	            task_id,
