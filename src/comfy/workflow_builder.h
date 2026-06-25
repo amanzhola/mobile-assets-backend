@@ -49,6 +49,12 @@ public:
 	    const std::string& positive_prompt,
 	    double denoise
 	) const;
+	
+	json::object BuildSmileEditLivePortraitWorkflow(
+	    const std::string& input_image_file_name,
+	    const std::string& output_prefix,
+	    double smile_value
+	) const;
 
 private:
     json::object LoadWorkflowTemplate(const std::string& file_name) const;

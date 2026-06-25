@@ -158,28 +158,47 @@ bool ComfyClient::UploadImage(
 
 bool ComfyClient::DownloadOutputImage(
     const std::string& file_name,
-    const std::filesystem::path& destination_path
+    const std::filesystem::path& output_path
 ) const {
-    std::filesystem::create_directories(destination_path.parent_path());
+    return DownloadImageByType(
+        file_name,
+        "output",
+        output_path
+    );
+}
+
+bool ComfyClient::DownloadImageByType(
+    const std::string& file_name,
+    const std::string& image_type,
+    const std::filesystem::path& output_path
+) const {
+    std::filesystem::create_directories(output_path.parent_path());
 
     const std::string url =
         base_url_ +
         "/view?filename=" + file_name +
-        "&type=output&subfolder=";
+        "&type=" + image_type +
+        "&subfolder=";
 
     const std::string command =
-        "curl -fL -sS "
+        "curl -L --fail --silent --show-error "
         "\"" + url + "\" "
-        "-o \"" + destination_path.string() + "\"";
+        "-o \"" + output_path.string() + "\"";
 
-    const int code = std::system(command.c_str());
+    const int result =
+        std::system(command.c_str());
 
-    if (code != 0 || !std::filesystem::exists(destination_path)) {
+    if (
+        result != 0 ||
+        !std::filesystem::exists(output_path) ||
+        std::filesystem::file_size(output_path) == 0
+    ) {
         std::cout
             << "[COMFY_DOWNLOAD_ERROR]\n"
             << "file=" << file_name << "\n"
+            << "type=" << image_type << "\n"
             << "url=" << url << "\n"
-            << "code=" << code << "\n"
+            << "code=" << result << "\n"
             << std::endl;
 
         return false;
@@ -188,7 +207,8 @@ bool ComfyClient::DownloadOutputImage(
     std::cout
         << "[COMFY_DOWNLOAD_OK]\n"
         << "file=" << file_name << "\n"
-        << "saved=" << destination_path.string() << "\n"
+        << "type=" << image_type << "\n"
+        << "saved=" << output_path.string() << "\n"
         << std::endl;
 
     return true;

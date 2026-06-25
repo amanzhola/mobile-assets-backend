@@ -28,6 +28,12 @@ public:
 	    const std::filesystem::path& destination_path
 	) const;
 	
+	bool DownloadImageByType(
+	    const std::string& file_name,
+	    const std::string& image_type,
+	    const std::filesystem::path& output_path
+	) const;
+	
     std::optional<std::string> QueuePrompt(const json::object& workflow) const;
 
     std::optional<json::object> GetHistory(const std::string& prompt_id) const;

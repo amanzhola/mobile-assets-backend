@@ -166,6 +166,45 @@ void ReplaceStringPlaceholder(
     }
 }
 
+void ReplaceNumberPlaceholder(
+    json::value& value,
+    const std::string& placeholder,
+    double replacement
+) {
+    if (value.is_string()) {
+        const std::string current =
+            std::string(value.as_string());
+
+        if (current == placeholder) {
+            value = replacement;
+        }
+
+        return;
+    }
+
+    if (value.is_object()) {
+        for (auto& item : value.as_object()) {
+            ReplaceNumberPlaceholder(
+                item.value(),
+                placeholder,
+                replacement
+            );
+        }
+
+        return;
+    }
+
+    if (value.is_array()) {
+        for (auto& item : value.as_array()) {
+            ReplaceNumberPlaceholder(
+                item,
+                placeholder,
+                replacement
+            );
+        }
+    }
+}
+
 }  // namespace
 
 json::object WorkflowBuilder::BuildWorkflow(
@@ -345,6 +384,36 @@ json::object WorkflowBuilder::BuildRemoveObjectsInpaintWorkflow(
         workflow_value,
         "{{mask_image}}",
         mask_image_file_name
+    );
+
+    return workflow_value.as_object();
+}
+
+json::object WorkflowBuilder::BuildSmileEditLivePortraitWorkflow(
+    const std::string& input_image_file_name,
+    const std::string& output_prefix,
+    double smile_value
+) const {
+    json::object workflow =
+        LoadWorkflowTemplate("smile_edit_liveportrait.json");
+
+    json::value workflow_value = workflow;
+
+    ReplacePlaceholders(
+        workflow_value,
+        input_image_file_name,
+        "",
+        output_prefix,
+        "",
+        "",
+        0.0,
+        0
+    );
+
+    ReplaceNumberPlaceholder(
+        workflow_value,
+        "{{smile_value}}",
+        smile_value
     );
 
     return workflow_value.as_object();
