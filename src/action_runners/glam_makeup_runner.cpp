@@ -1,115 +1,9 @@
 #include "glam_makeup_runner.h"
 
-#include "../generation/generation_json.h"
-
 #include <filesystem>
 #include <iostream>
 
 namespace action_runners {
-
-namespace {
-
-std::string ReadAnyOption(
-    const json::object& request,
-    const std::vector<std::string>& keys
-) {
-    for (const auto& key : keys) {
-        std::string value =
-            generation::ReadOptionString(request, key);
-
-        if (!value.empty()) {
-            return value;
-        }
-    }
-
-    return {};
-}
-
-std::string NormalizeMakeupStyle(const std::string& raw) {
-    std::string value = raw;
-
-    for (char& ch : value) {
-        ch = static_cast<char>(std::tolower(ch));
-    }
-
-    if (
-        value == "natural_glow" ||
-        value == "natural glow" ||
-        value == "естественный" ||
-        value == "натуральный" ||
-        value == "натуральное сияние"
-    ) {
-        return "natural glowing makeup, soft healthy skin glow, subtle blush, nude lipstick";
-    }
-
-    if (
-        value == "gentle_glam" ||
-        value == "gentle glam" ||
-        value == "soft glam" ||
-        value == "мягкий гламур" ||
-        value == "легкий гламур"
-    ) {
-        return "gentle glam makeup, soft pink blush, defined lashes, nude glossy lipstick";
-    }
-
-    if (
-        value == "rich_glam" ||
-        value == "rich glam" ||
-        value == "яркий гламур" ||
-        value == "насыщенный гламур"
-    ) {
-        return "rich glam makeup, elegant contour, stronger lashes, satin lipstick, polished beauty look";
-    }
-
-    if (
-        value == "evening_look" ||
-        value == "evening look" ||
-        value == "вечерний" ||
-        value == "вечерний макияж"
-    ) {
-        return "evening makeup look, elegant eye makeup, soft smoky eyes, refined lipstick, luxury beauty portrait";
-    }
-
-    if (!raw.empty()) {
-        return raw;
-    }
-
-    return "natural glowing makeup, soft pink blush, nude lipstick";
-}
-
-std::string NormalizeMakeupDetails(const std::string& raw) {
-    std::string value = raw;
-
-    for (char& ch : value) {
-        ch = static_cast<char>(std::tolower(ch));
-    }
-
-    if (
-        value.find("нежно") != std::string::npos &&
-        value.find("роз") != std::string::npos &&
-        value.find("рум") != std::string::npos
-    ) {
-        return "soft pink blush";
-    }
-
-    if (
-        value.find("нюд") != std::string::npos ||
-        value.find("nude") != std::string::npos
-    ) {
-        return "nude lipstick";
-    }
-
-    if (
-        value.find("сия") != std::string::npos ||
-        value.find("glow") != std::string::npos
-    ) {
-        return "soft glowing skin";
-    }
-
-    return raw;
-}
-
-}  // namespace
 
 GlamMakeupRunner::GlamMakeupRunner(
     fs::path backend_input_dir,
@@ -117,60 +11,16 @@ GlamMakeupRunner::GlamMakeupRunner(
     fs::path comfy_output_dir,
     comfy::ComfyClient& comfy_client,
     comfy::WorkflowBuilder& workflow_builder,
-    output::OutputService& output_service
+    output::OutputService& output_service,
+    prompt::PromptBuilder& prompt_builder
 )
     : backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
     , comfy_output_dir_{std::move(comfy_output_dir)}
     , comfy_client_{comfy_client}
     , workflow_builder_{workflow_builder}
-    , output_service_{output_service} {}
-
-std::string GlamMakeupRunner::BuildPrompt(
-    const json::object& request
-) const {
-    const std::string style =
-        ReadAnyOption(
-            request,
-            {
-                "makeupStyle",
-                "glamMakeupStyle",
-                "style",
-                "makeup_style"
-            }
-        );
-
-    const std::string details =
-        ReadAnyOption(
-            request,
-            {
-                "optionalDetails",
-                "details",
-                "makeupDetails",
-                "customMakeup",
-                "description"
-            }
-        );
-
-    const std::string prompt =
-        generation::ReadStringOrEmpty(request, "prompt");
-
-    std::string makeup_prompt =
-        NormalizeMakeupStyle(style);
-
-    if (!details.empty()) {
-	    makeup_prompt += ", " + NormalizeMakeupDetails(details);
-	} else if (!prompt.empty()) {
-	    makeup_prompt += ", " + NormalizeMakeupDetails(prompt);
-	}
-
-    return
-        "apply realistic professional makeup to the same person, "
-        "preserve exact face identity, preserve facial structure, preserve skin texture, "
-        "do not change age, do not change hairstyle, do not change clothing, "
-        + makeup_prompt +
-        ", beauty photography, clean realistic face, natural lighting";
-}
+    , output_service_{output_service}
+    , prompt_builder_{prompt_builder} {}
 
 std::optional<std::string> GlamMakeupRunner::FindNewestComfyOutputByPrefix(
     const std::string& output_prefix
@@ -261,24 +111,19 @@ std::optional<std::string> GlamMakeupRunner::Run(
         );
 
         const bool uploaded =
-		    comfy_client_.UploadImage(
-		        backend_input_file,
-		        input_file_name
-		    );
-		
-		if (!uploaded) {
-		    std::cout
-		        << "[GLAM_MAKEUP_UPLOAD_FAILED]\n"
-		        << "file=" << backend_input_file.string() << "\n"
-		        << std::endl;
-		
-		    return std::nullopt;
-		}
-		
-		std::cout
-		    << "[GLAM_MAKEUP_UPLOAD_OK]\n"
-		    << "fileName=" << input_file_name << "\n"
-		    << std::endl;
+            comfy_client_.UploadImage(
+                backend_input_file,
+                input_file_name
+            );
+
+        if (!uploaded) {
+            std::cout
+                << "[GLAM_MAKEUP_UPLOAD_FAILED]\n"
+                << "file=" << backend_input_file.string() << "\n"
+                << std::endl;
+
+            return std::nullopt;
+        }
 
         update_progress(20);
 
@@ -287,16 +132,14 @@ std::optional<std::string> GlamMakeupRunner::Run(
             std::to_string(image_index);
 
         const std::string positive_prompt =
-            BuildPrompt(request);
-
-        const double denoise = 0.34;
+            prompt_builder_.BuildGlamMakeupPrompt(request);
 
         json::object workflow =
             workflow_builder_.BuildToolWorkflow(
                 input_file_name,
                 output_prefix,
                 positive_prompt,
-                denoise
+                0.28
             );
 
         std::cout
@@ -377,9 +220,7 @@ std::optional<std::string> GlamMakeupRunner::Run(
         update_progress(92);
 
         const fs::path saved_output_file =
-            output_service_.SaveFromComfyOutput(
-                local_comfy_output_file
-            );
+            output_service_.SaveFromComfyOutput(local_comfy_output_file);
 
         update_progress(95);
 

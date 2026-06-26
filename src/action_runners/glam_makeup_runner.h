@@ -3,6 +3,7 @@
 #include "../comfy/comfy_client.h"
 #include "../comfy/workflow_builder.h"
 #include "../output_service.h"
+#include "../prompt/prompt_builder.h"
 
 #include <boost/json.hpp>
 
@@ -24,7 +25,8 @@ public:
         fs::path comfy_output_dir,
         comfy::ComfyClient& comfy_client,
         comfy::WorkflowBuilder& workflow_builder,
-        output::OutputService& output_service
+        output::OutputService& output_service,
+        prompt::PromptBuilder& prompt_builder
     );
 
     std::optional<std::string> Run(
@@ -40,10 +42,6 @@ private:
         const std::string& output_prefix
     ) const;
 
-    std::string BuildPrompt(
-        const json::object& request
-    ) const;
-
 private:
     fs::path backend_input_dir_;
     fs::path comfy_input_dir_;
@@ -52,6 +50,7 @@ private:
     comfy::ComfyClient& comfy_client_;
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
+    prompt::PromptBuilder& prompt_builder_;
 };
 
 }  // namespace action_runners

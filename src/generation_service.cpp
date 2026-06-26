@@ -38,6 +38,8 @@ GenerationService::GenerationService(
     , backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
     , comfy_output_dir_{std::move(comfy_output_dir)}
+    , prompt_translator_{}
+	, prompt_builder_{prompt_translator_}
     , remove_background_runner_{
         fs::path{"/home/ubuntu/mobile-assets-backend"},
         backend_input_dir_,
@@ -111,7 +113,8 @@ GenerationService::GenerationService(
 	    comfy_output_dir_,
 	    comfy_client_,
 	    workflow_builder_,
-	    output_service_
+	    output_service_,
+	    prompt_builder_
 	}
 	, action_router_{
 	    comfy_generation_mutex_,

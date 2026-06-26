@@ -18,6 +18,8 @@
 #include "action_runners/skin_improve_runner.h"
 #include "action_runners/smile_edit_runner.h"
 #include "action_runners/glam_makeup_runner.h"
+#include "prompt/prompt_translator.h"
+#include "prompt/prompt_builder.h"
 
 #include <boost/json.hpp>
 
@@ -111,12 +113,15 @@ private:
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
     templates::TemplateAssetService& template_asset_service_;
-    action_runners::RemoveObjectsMaskRunner& remove_objects_mask_runner_;
-
+    
     fs::path backend_input_dir_;
     fs::path comfy_input_dir_;
     fs::path comfy_output_dir_;
     
+    prompt::PromptTranslator prompt_translator_;
+	prompt::PromptBuilder prompt_builder_;
+    
+    action_runners::RemoveObjectsMaskRunner& remove_objects_mask_runner_;
     action_runners::RemoveBackgroundRunner remove_background_runner_;
     action_runners::AiEnhancerRunner ai_enhancer_runner_;
     action_runners::RemoveObjectsRunner remove_objects_runner_;
