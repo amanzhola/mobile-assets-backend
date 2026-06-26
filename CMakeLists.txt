@@ -45,6 +45,15 @@ add_executable(mobile_assets_backend
     src/action_runners/skin_improve_runner.cpp
     src/action_runners/smile_edit_runner.cpp
     src/action_runners/glam_makeup_runner.cpp
+    src/prompt/prompt_translator.cpp
+    src/prompt/prompt_builder.cpp
+    src/prompt/prompt_templates.cpp
+    src/prompt/prompt_normalizer.cpp
+    src/face_edit/face_edit_plan.cpp
+    src/face_edit/face_regions.cpp
+    src/face_edit/face_parser.cpp
+    src/face_edit/face_masks.cpp
+    src/face_edit/face_editor.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE
