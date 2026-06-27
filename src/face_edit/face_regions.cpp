@@ -14,6 +14,8 @@ std::string FaceRegionToString(FaceRegion region) {
             return "eyelids";
         case FaceRegion::Eyes:
             return "eyes";
+        case FaceRegion::Eyebrows:
+            return "eyebrows";
         case FaceRegion::Skin:
             return "skin";
         case FaceRegion::Hair:

@@ -2,6 +2,7 @@
 
 #include "face_parser.h"
 
+#include <algorithm>
 #include <sstream>
 
 namespace face_edit {
@@ -21,6 +22,37 @@ std::string FaceEditPlan::ToPromptText() const {
     }
 
     return out.str();
+}
+
+std::vector<FaceRegion> FaceEditPlan::MaskableRegions() const {
+    std::vector<FaceRegion> result;
+
+    for (const auto& item : instructions) {
+        const FaceRegion region = item.region;
+
+        const bool maskable =
+            region == FaceRegion::Lips ||
+            region == FaceRegion::Cheeks ||
+            region == FaceRegion::Eyelids ||
+            region == FaceRegion::Eyes ||
+            region == FaceRegion::Eyebrows ||
+            region == FaceRegion::Skin ||
+            region == FaceRegion::Face ||
+            region == FaceRegion::FaceContour;
+
+        if (!maskable) {
+            continue;
+        }
+
+        const bool exists =
+            std::find(result.begin(), result.end(), region) != result.end();
+
+        if (!exists) {
+            result.push_back(region);
+        }
+    }
+
+    return result;
 }
 
 FaceEditPlan BuildFaceEditPlanFromEnglish(

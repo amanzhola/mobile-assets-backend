@@ -5,15 +5,17 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace face_edit {
 
 namespace fs = std::filesystem;
 
 struct FaceMaskRequest {
+    fs::path project_root;
     fs::path input_image;
     fs::path output_mask;
-    FaceRegion region = FaceRegion::Unknown;
+    std::vector<FaceRegion> regions;
 };
 
 class FaceMasks {

@@ -17,6 +17,7 @@ struct FaceEditPlan {
     std::vector<FaceEditInstruction> instructions;
 
     std::string ToPromptText() const;
+    std::vector<FaceRegion> MaskableRegions() const;
 };
 
 FaceEditPlan BuildFaceEditPlanFromEnglish(

@@ -4,6 +4,7 @@
 #include "../comfy/workflow_builder.h"
 #include "../output_service.h"
 #include "../prompt/prompt_builder.h"
+#include "../face_edit/face_masks.h"
 
 #include <boost/json.hpp>
 
@@ -20,6 +21,7 @@ namespace fs = std::filesystem;
 class GlamMakeupRunner {
 public:
     GlamMakeupRunner(
+        fs::path project_root,
         fs::path backend_input_dir,
         fs::path comfy_input_dir,
         fs::path comfy_output_dir,
@@ -43,6 +45,7 @@ private:
     ) const;
 
 private:
+    fs::path project_root_;
     fs::path backend_input_dir_;
     fs::path comfy_input_dir_;
     fs::path comfy_output_dir_;
@@ -51,6 +54,7 @@ private:
     comfy::WorkflowBuilder& workflow_builder_;
     output::OutputService& output_service_;
     prompt::PromptBuilder& prompt_builder_;
+    face_edit::FaceMasks face_masks_;
 };
 
 }  // namespace action_runners

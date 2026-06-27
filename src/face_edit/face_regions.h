@@ -10,6 +10,7 @@ enum class FaceRegion {
     Cheeks,
     Eyelids,
     Eyes,
+    Eyebrows,
     Skin,
     Hair,
     FaceContour,

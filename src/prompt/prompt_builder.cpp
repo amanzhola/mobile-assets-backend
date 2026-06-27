@@ -2,7 +2,6 @@
 
 #include "prompt_normalizer.h"
 #include "prompt_templates.h"
-#include "../face_edit/face_edit_plan.h"
 #include "../generation/generation_json.h"
 
 #include <iostream>
@@ -15,7 +14,7 @@ PromptBuilder::PromptBuilder(
 )
     : translator_{translator} {}
 
-std::string PromptBuilder::BuildGlamMakeupPrompt(
+GlamMakeupPromptResult PromptBuilder::BuildGlamMakeupPrompt(
     const json::object& request
 ) const {
     std::string style =
@@ -77,7 +76,8 @@ std::string PromptBuilder::BuildGlamMakeupPrompt(
     }
 
     prompt
-        << ", natural makeup application, seamless realistic skin texture, high quality portrait";
+        << ", edit only the intended makeup regions, do not modify nose or face shape, "
+        << "natural makeup application, seamless realistic skin texture, high quality portrait";
 
     std::cout
         << "[GLAM_PROMPT_BUILT]\n"
@@ -87,7 +87,11 @@ std::string PromptBuilder::BuildGlamMakeupPrompt(
         << "prompt=" << prompt.str() << "\n"
         << std::endl;
 
-    return prompt.str();
+    return GlamMakeupPromptResult{
+        prompt.str(),
+        english_details,
+        plan
+    };
 }
 
 }  // namespace prompt

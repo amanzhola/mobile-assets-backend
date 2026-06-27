@@ -187,7 +187,7 @@ std::optional<TemplateWorkflowResult> TemplateRunner::BuildTemplateWorkflow(
 
     const std::string convert_template_command =
         "cd /home/ubuntu/mobile-assets-backend && "
-        ".venv-tools/bin/python3 scripts/convert_image_to_png.py "
+        ".venv-tools/bin/python3 scripts/common/convert_image_to_png.py "
         + ShellQuote(cached_template_file.string()) + " "
         + ShellQuote(converted_template_file.string());
 
@@ -251,7 +251,7 @@ std::optional<TemplateWorkflowResult> TemplateRunner::BuildTemplateWorkflow(
 
     const std::string remove_bg_command =
         "cd /home/ubuntu/mobile-assets-backend && "
-        ".venv-tools/bin/python3 scripts/remove_background.py "
+        ".venv-tools/bin/python3 scripts/background/remove_background.py "
         + ShellQuote(backend_input_file.string()) + " "
         + ShellQuote(transparent_subject_file.string()) + " "
         "transparent";

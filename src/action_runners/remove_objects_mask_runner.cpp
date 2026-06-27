@@ -94,7 +94,7 @@ std::optional<std::string> RemoveObjectsMaskRunner::CreateRemoveObjectsMask(
 
     const std::string command =
         "cd \"" + project_root_.string() + "\" && "
-        ".venv-tools/bin/python3 scripts/create_object_mask_sam.py "
+        ".venv-tools/bin/python3 scripts/objects/auto/create_object_mask_sam.py "
         "\"" + input_file.string() + "\" "
         "\"" + mask_file.string() + "\" "
         "\"" + object_text + "\" "

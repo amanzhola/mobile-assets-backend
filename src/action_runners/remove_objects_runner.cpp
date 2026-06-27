@@ -288,7 +288,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
 
         const std::string composite_command =
             "cd \"" + project_root_.string() + "\" && "
-            ".venv-tools/bin/python3 scripts/apply_inpaint_mask.py "
+            ".venv-tools/bin/python3 scripts/objects/common/apply_inpaint_mask.py "
             "\"" + backend_input_file.string() + "\" "
             "\"" + local_comfy_output_file.string() + "\" "
             "\"" + backend_mask_file.string() + "\" "

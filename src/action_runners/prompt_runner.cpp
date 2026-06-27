@@ -93,7 +93,7 @@ std::optional<std::string> PromptRunner::Run(
         std::ostringstream command;
         command
             << "cd " << ShellQuote(project_root_.string()) << " && "
-            << ".venv-tools/bin/python3 scripts/create_prompt_collage.py "
+            << ".venv-tools/bin/python3 scripts/generation/create_prompt_collage.py "
             << ShellQuote(output_file.string()) << " "
             << ShellQuote(prompt);
 

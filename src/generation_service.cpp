@@ -108,6 +108,7 @@ GenerationService::GenerationService(
 	    output_service_
 	}
 	, glam_makeup_runner_{
+	    fs::path{"/home/ubuntu/mobile-assets-backend"},
 	    backend_input_dir_,
 	    comfy_input_dir_,
 	    comfy_output_dir_,

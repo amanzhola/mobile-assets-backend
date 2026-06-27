@@ -145,7 +145,7 @@ std::optional<std::string> RemoveObjectsCleanupRunner::Run(
 
         const std::string prepare_mask_command =
             "cd \"" + project_root_.string() + "\" && "
-            ".venv-tools/bin/python3 scripts/prepare_manual_cleanup_mask.py "
+            ".venv-tools/bin/python3 scripts/objects/manual/prepare_manual_cleanup_mask.py "
             "\"" + raw_mask_file.string() + "\" "
             "\"" + prepared_mask_file.string() + "\"";
 
@@ -303,7 +303,7 @@ std::optional<std::string> RemoveObjectsCleanupRunner::Run(
 
         const std::string composite_command =
             "cd \"" + project_root_.string() + "\" && "
-            ".venv-tools/bin/python3 scripts/apply_inpaint_mask.py "
+            ".venv-tools/bin/python3 scripts/objects/common/apply_inpaint_mask.py "
             "\"" + source_file.string() + "\" "
             "\"" + local_comfy_output_file.string() + "\" "
             "\"" + prepared_mask_file.string() + "\" "

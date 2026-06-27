@@ -1,6 +1,7 @@
 #pragma once
 
 #include "prompt_translator.h"
+#include "../face_edit/face_edit_plan.h"
 
 #include <boost/json.hpp>
 
@@ -10,13 +11,19 @@ namespace prompt {
 
 namespace json = boost::json;
 
+struct GlamMakeupPromptResult {
+    std::string positive_prompt;
+    std::string english_details;
+    face_edit::FaceEditPlan face_plan;
+};
+
 class PromptBuilder {
 public:
     explicit PromptBuilder(
         PromptTranslator& translator
     );
 
-    std::string BuildGlamMakeupPrompt(
+    GlamMakeupPromptResult BuildGlamMakeupPrompt(
         const json::object& request
     ) const;
 

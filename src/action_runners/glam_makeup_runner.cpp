@@ -2,10 +2,93 @@
 
 #include <filesystem>
 #include <iostream>
+#include <cstdlib>
+#include <sstream>
+#include <algorithm>
+
+namespace {
+
+std::string ShellQuote(const std::string& value) {
+    std::string result = "'";
+
+    for (char ch : value) {
+        if (ch == '\'') {
+            result += "'\\''";
+        } else {
+            result += ch;
+        }
+    }
+
+    result += "'";
+    return result;
+}
+
+std::string FirstRegionName(
+    const std::vector<face_edit::FaceRegion>& regions
+) {
+    if (regions.empty()) {
+        return "face";
+    }
+
+    return face_edit::FaceRegionToString(regions.front());
+}
+
+std::string Lower(std::string value) {
+    std::transform(
+        value.begin(),
+        value.end(),
+        value.begin(),
+        [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        }
+    );
+
+    return value;
+}
+
+bool Contains(
+    const std::string& text,
+    const std::string& part
+) {
+    return text.find(part) != std::string::npos;
+}
+
+bool IsComplexMakeupRequest(
+    const std::string& english_details
+) {
+    const std::string text = Lower(english_details);
+
+    return
+        Contains(text, "evening makeup") ||
+        Contains(text, "glam makeup") ||
+        Contains(text, "natural makeup") ||
+        Contains(text, "full makeup") ||
+        Contains(text, "smokey") ||
+        Contains(text, "smoky") ||
+        Contains(text, "dramatic") ||
+        Contains(text, "contour") ||
+        Contains(text, "skin") ||
+        Contains(text, "foundation");
+}
+
+bool IsLocalMakeupRegion(
+    const std::string& region_name
+) {
+    return
+        region_name == "lips" ||
+        region_name == "cheeks" ||
+        region_name == "eyelids" ||
+        region_name == "eyebrows" ||
+        region_name == "eyes" ||
+		region_name == "eyebrows";
+}
+
+}  // namespace
 
 namespace action_runners {
 
 GlamMakeupRunner::GlamMakeupRunner(
+    fs::path project_root,
     fs::path backend_input_dir,
     fs::path comfy_input_dir,
     fs::path comfy_output_dir,
@@ -14,7 +97,8 @@ GlamMakeupRunner::GlamMakeupRunner(
     output::OutputService& output_service,
     prompt::PromptBuilder& prompt_builder
 )
-    : backend_input_dir_{std::move(backend_input_dir)}
+    : project_root_{std::move(project_root)}
+    , backend_input_dir_{std::move(backend_input_dir)}
     , comfy_input_dir_{std::move(comfy_input_dir)}
     , comfy_output_dir_{std::move(comfy_output_dir)}
     , comfy_client_{comfy_client}
@@ -110,37 +194,168 @@ std::optional<std::string> GlamMakeupRunner::Run(
             fs::copy_options::overwrite_existing
         );
 
-        const bool uploaded =
+        const bool input_uploaded =
             comfy_client_.UploadImage(
                 backend_input_file,
                 input_file_name
             );
 
-        if (!uploaded) {
+        if (!input_uploaded) {
             std::cout
-                << "[GLAM_MAKEUP_UPLOAD_FAILED]\n"
-                << "file=" << backend_input_file.string() << "\n"
+                << "[GLAM_MAKEUP_UPLOAD_SKIPPED]\n"
+                << "reason=file already copied to Comfy input dir\n"
+                << "fileName=" << input_file_name << "\n"
+                << "path=" << comfy_input_file.string() << "\n"
                 << std::endl;
-
-            return std::nullopt;
         }
 
         update_progress(20);
+
+        const auto prompt_result =
+            prompt_builder_.BuildGlamMakeupPrompt(request);
+
+        const auto mask_regions =
+            prompt_result.face_plan.MaskableRegions();
+
+        std::string mask_file_name;
+        bool use_region_mask = false;
+
+        if (!mask_regions.empty()) {
+            mask_file_name =
+                "mask_glam_makeup_" + task_id + "_" +
+                std::to_string(image_index) + ".png";
+
+            const fs::path backend_mask_file =
+                backend_input_dir_ / mask_file_name;
+
+            auto mask_path =
+                face_masks_.CreateMask(
+                    face_edit::FaceMaskRequest{
+                        project_root_,
+                        backend_input_file,
+                        backend_mask_file,
+                        mask_regions
+                    }
+                );
+
+            if (mask_path) {
+                const fs::path comfy_mask_file =
+                    comfy_input_dir_ / mask_file_name;
+
+                fs::copy_file(
+                    *mask_path,
+                    comfy_mask_file,
+                    fs::copy_options::overwrite_existing
+                );
+
+                const bool mask_uploaded =
+                    comfy_client_.UploadImage(
+                        *mask_path,
+                        mask_file_name
+                    );
+
+                if (!mask_uploaded) {
+                    std::cout
+                        << "[GLAM_MAKEUP_MASK_UPLOAD_SKIPPED]\n"
+                        << "reason=mask already copied to Comfy input dir\n"
+                        << "maskFileName=" << mask_file_name << "\n"
+                        << "mask=" << comfy_mask_file.string() << "\n"
+                        << std::endl;
+                }
+
+                use_region_mask = true;
+
+                std::cout
+                    << "[GLAM_MAKEUP_REGION_MASK_READY]\n"
+                    << "maskFileName=" << mask_file_name << "\n"
+                    << std::endl;
+            }
+        }
+
+        update_progress(30);
 
         const std::string output_prefix =
             "pixo_glam_makeup_" + task_id + "_" +
             std::to_string(image_index);
 
-        const std::string positive_prompt =
-            prompt_builder_.BuildGlamMakeupPrompt(request);
+        const std::string region_name =
+            FirstRegionName(mask_regions);
 
-        json::object workflow =
-            workflow_builder_.BuildToolWorkflow(
-                input_file_name,
-                output_prefix,
-                positive_prompt,
-                0.28
-            );
+        const bool can_use_local_makeup =
+            use_region_mask &&
+            mask_regions.size() == 1 &&
+            IsLocalMakeupRegion(region_name) &&
+            !IsComplexMakeupRequest(prompt_result.english_details);
+
+        if (can_use_local_makeup) {
+            const fs::path backend_mask_file =
+                backend_input_dir_ / mask_file_name;
+
+            const std::string local_output_name =
+                "pixo_glam_makeup_" + task_id + "_" +
+                std::to_string(image_index) + ".png";
+
+            const fs::path local_output_file =
+                output_service_.GetFilePath(local_output_name);
+
+            std::ostringstream command;
+            command
+                << "cd " << ShellQuote(project_root_.string()) << " && "
+                << ".venv-tools/bin/python3 scripts/face/makeup/apply_face_makeup.py "
+                << ShellQuote(backend_input_file.string()) << " "
+                << ShellQuote(backend_mask_file.string()) << " "
+                << ShellQuote(local_output_file.string()) << " "
+                << ShellQuote(region_name) << " "
+                << ShellQuote(prompt_result.english_details);
+
+            std::cout
+                << "[GLAM_MAKEUP_LOCAL_START]\n"
+                << "region=" << region_name << "\n"
+                << "command=" << command.str() << "\n"
+                << std::endl;
+
+            update_progress(60);
+
+            const int local_result =
+                std::system(command.str().c_str());
+
+            if (
+                local_result == 0 &&
+                fs::exists(local_output_file) &&
+                fs::file_size(local_output_file) > 0
+            ) {
+                update_progress(95);
+
+                const std::string public_url =
+                    output_service_.GetPublicUrl(local_output_name);
+
+                std::cout
+                    << "[GLAM_MAKEUP_SUCCESS]\n"
+                    << "taskId=" << task_id << "\n"
+                    << "publicUrl=" << public_url << "\n"
+                    << std::endl;
+
+                return public_url;
+            }
+
+            std::cout
+                << "[GLAM_MAKEUP_LOCAL_FAILED_FALLBACK_TO_COMFY]\n"
+                << "result=" << local_result << "\n"
+                << std::endl;
+        }
+
+        const double denoise =
+		    IsComplexMakeupRequest(prompt_result.english_details)
+		        ? 0.45
+		        : 0.28;
+		
+		json::object workflow =
+		    workflow_builder_.BuildToolWorkflow(
+		        input_file_name,
+		        output_prefix,
+		        prompt_result.positive_prompt,
+		        denoise
+		    );
 
         std::cout
             << "[GLAM_MAKEUP_WORKFLOW_JSON]\n"
@@ -159,7 +374,6 @@ std::optional<std::string> GlamMakeupRunner::Run(
             return std::nullopt;
         }
 
-        update_progress(30);
         update_progress(40);
 
         auto comfy_output_file_name =

@@ -58,7 +58,9 @@ std::vector<ParsedFaceRequest> ParseFaceRequestEnglish(
 
     if (
         Contains(text, "lipstick") ||
-        Contains(text, " lips") ||
+        Contains(text, "lip gloss") ||
+        Contains(text, "lip color") ||
+        Contains(text, "lips") ||
         Contains(text, " lip ") ||
         Contains(text, " lip,") ||
         Contains(text, " lip.")
@@ -69,6 +71,7 @@ std::vector<ParsedFaceRequest> ParseFaceRequestEnglish(
     if (
         Contains(text, "blush") ||
         Contains(text, "cheek") ||
+        Contains(text, "cheeks") ||
         Contains(text, "rouge")
     ) {
         Add(result, FaceRegion::Cheeks, "blush", english_text);
@@ -77,16 +80,31 @@ std::vector<ParsedFaceRequest> ParseFaceRequestEnglish(
     if (
         Contains(text, "eyeshadow") ||
         Contains(text, "eye shadow") ||
-        Contains(text, "eyelid")
+        Contains(text, "eyelid") ||
+        Contains(text, "eyelids") ||
+        Contains(text, "smokey eye") ||
+        Contains(text, "smokey eyes") ||
+        Contains(text, "smoky eye") ||
+        Contains(text, "smoky eyes") ||
+        Contains(text, "gold eyeshadow") ||
+        Contains(text, "golden eyeshadow") ||
+        Contains(text, "painted eyes") ||
+        Contains(text, "made-up eyes") ||
+        Contains(text, "makeup eyes") ||
+        Contains(text, "eye makeup")
     ) {
         Add(result, FaceRegion::Eyelids, "eyeshadow", english_text);
     }
 
     if (
         Contains(text, "lash") ||
+        Contains(text, "lashes") ||
         Contains(text, "eyelash") ||
+        Contains(text, "eyelashes") ||
         Contains(text, "mascara") ||
-        Contains(text, "eyeliner")
+        Contains(text, "eyeliner") ||
+        Contains(text, "cat eye") ||
+        Contains(text, "winged liner")
     ) {
         Add(result, FaceRegion::Eyes, "eye makeup", english_text);
     }
@@ -118,6 +136,15 @@ std::vector<ParsedFaceRequest> ParseFaceRequestEnglish(
     ) {
         Add(result, FaceRegion::FaceContour, "contour", english_text);
     }
+    
+    if (
+	    Contains(text, "eyebrow") ||
+	    Contains(text, "eyebrows") ||
+	    Contains(text, "brow") ||
+	    Contains(text, "brows")
+	) {
+	    Add(result, FaceRegion::Eyebrows, "eyebrow makeup", english_text);
+	}
 
     if (result.empty()) {
         Add(result, FaceRegion::Face, "face edit", english_text);

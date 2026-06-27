@@ -97,7 +97,7 @@ std::optional<std::string> UpscaleRunner::Run(
         std::ostringstream command;
         command
             << "cd " << ShellQuote(project_root_.string()) << " && "
-            << ".venv-tools/bin/python3 scripts/upscale_image.py "
+            << ".venv-tools/bin/python3 scripts/upscale/upscale_image.py "
             << ShellQuote(input_file.string()) << " "
             << ShellQuote(output_file.string()) << " "
             << scale;

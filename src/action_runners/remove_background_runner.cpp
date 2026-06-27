@@ -46,7 +46,7 @@ std::optional<std::string> RemoveBackgroundRunner::Run(
 
     const std::string command =
         "cd \"" + project_root_.string() + "\" && "
-        ".venv-tools/bin/python3 scripts/remove_background.py "
+        ".venv-tools/bin/python3 scripts/background/remove_background.py "
         "\"" + input_file.string() + "\" "
         "\"" + output_file.string() + "\" "
         + final_mode;
