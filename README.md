@@ -44,6 +44,7 @@ Backend для AI-генерации изображений, шаблонов, u
 | `feature/smile-edit-runner`        | Smile Edit runner | добавлен `SmileEditRunner`, LivePortrait workflow и ComfyClient fixes | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/smile-edit-runner/README.md) |
 | `feature/glam-makeup-runner`       | Glam Makeup runner | добавлен `GlamMakeupRunner` как отдельный runner для face editing pipeline | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/glam-makeup-runner/README.md) |
 | `feature/prompt-platform`          | Prompt Platform + Face Editing pipeline | модульная архитектура action runners, Qwen prompt translation, локальный Glam Makeup через Face Masks/MediaPipe/OpenCV/Pillow, Remove Objects manual cleanup, AI Enhancer/Upscale/Background/Showcase assets | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/prompt-platform/README.md) |
+| `feature/change-scene-runner`      | Change Scene runner | Вынесение `change_scene` из общего `ToolActionRunner` в отдельный pipeline: subject cutout через `remove_background.py`, генерация нового background через ComfyUI text-to-image, финальный composite subject over background | `ChangeSceneRunner`, `BuildChangeScenePrompt`, `BuildChangeSceneBackgroundWorkflow`, `change_scene_background.json`, `composite_subject_on_background.py` | [README](https://github.com/amanzhola/mobile-assets-backend/blob/feature/change-scene-runner/README.md) |
 
 ---
 
