@@ -390,6 +390,72 @@ watch -n 3 "curl -s http://localhost:8080/generations/$TASK_ID | jq"
 
 ---
 
+# Existing Pipelines Still Working
+
+Besides the new `change_scene` pipeline, this branch verifies that previously extracted action runners continue to work correctly after the routing changes.
+
+## AI Enhancer
+
+| Input | Output |
+|------|------|
+| ![](readme_assets/ai_enhancer/input.jpg) | ![](readme_assets/ai_enhancer/output_1.png) |
+
+Upscale result:
+
+| Output |
+|------|
+| ![](readme_assets/ai_enhancer/output_2.png) |
+
+---
+
+## Remove Background
+
+| Input | Output |
+|------|------|
+| ![](readme_assets/remove_background/input.jpg) | ![](readme_assets/remove_background/output.png) |
+
+---
+
+## Remove Objects
+
+Automatic removal:
+
+| Input | Auto Remove |
+|------|------|
+| ![](readme_assets/remove_objects/input.jpg) | ![](readme_assets/remove_objects/output_auto.png) |
+
+Manual cleanup:
+
+| Auto Result | Manual Cleanup |
+|------|------|
+| ![](readme_assets/remove_objects/output_auto.png) | ![](readme_assets/remove_objects/output_manual.png) |
+
+---
+
+## Glam Makeup
+
+| Input | Soft Pink Blush |
+|------|------|
+| ![](readme_assets/glam_makeup/input.jpg) | ![](readme_assets/glam_makeup/output_soft_pink_blush.png) |
+
+---
+
+## Skin Improve
+
+| Input | Output |
+|------|------|
+| ![](readme_assets/skin_clean/input.jpg) | ![](readme_assets/skin_clean/output.png) |
+
+---
+
+## Smile Edit
+
+| Input | Smile Level 3 |
+|------|------|
+| ![](readme_assets/smile/input.jpg) | ![](readme_assets/smile/output.png) |
+
+---
+
 ## Commit
 
 ```bash
