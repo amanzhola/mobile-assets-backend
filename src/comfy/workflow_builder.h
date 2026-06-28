@@ -50,6 +50,11 @@ public:
 	    double denoise
 	) const;
 	
+	json::object BuildChangeSceneBackgroundWorkflow(
+	    const std::string& output_prefix,
+	    const std::string& positive_prompt
+	) const;
+	
 	json::object BuildSmileEditLivePortraitWorkflow(
 	    const std::string& input_image_file_name,
 	    const std::string& output_prefix,

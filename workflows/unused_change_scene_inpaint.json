@@ -1,0 +1,99 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{input_image}}"
+    },
+    "_meta": {
+      "title": "Load Original Image"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{mask_image}}"
+    },
+    "_meta": {
+      "title": "Load Background Mask"
+    }
+  },
+  "3": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "Juggernaut-XL_Lightning.safetensors"
+    },
+    "_meta": {
+      "title": "Load SDXL"
+    }
+  },
+  "4": {
+    "class_type": "VAEEncodeForInpaint",
+    "inputs": {
+      "pixels": ["1", 0],
+      "vae": ["3", 2],
+      "mask": ["2", 1],
+      "grow_mask_by": 0
+    },
+    "_meta": {
+      "title": "Encode Background Inpaint"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "{{positive_prompt}}",
+      "clip": ["3", 1]
+    },
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "{{negative_prompt}}",
+      "clip": ["3", 1]
+    },
+    "_meta": {
+      "title": "Negative Prompt"
+    }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "{{seed}}",
+      "steps": 26,
+      "cfg": 6.0,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": "{{denoise}}",
+      "model": ["3", 0],
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["4", 0]
+    },
+    "_meta": {
+      "title": "Generate New Background"
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["3", 2]
+    },
+    "_meta": {
+      "title": "Decode"
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["8", 0],
+      "filename_prefix": "{{output_prefix}}"
+    },
+    "_meta": {
+      "title": "Save Change Scene"
+    }
+  }
+}

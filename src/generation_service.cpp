@@ -117,6 +117,16 @@ GenerationService::GenerationService(
 	    output_service_,
 	    prompt_builder_
 	}
+	, change_scene_runner_{
+		fs::path{"/home/ubuntu/mobile-assets-backend"},
+	    backend_input_dir_,
+	    comfy_input_dir_,
+	    comfy_output_dir_,
+	    comfy_client_,
+	    workflow_builder_,
+	    output_service_,
+	    prompt_builder_
+	}
 	, action_router_{
 	    comfy_generation_mutex_,
 	    remove_background_runner_,
@@ -128,6 +138,7 @@ GenerationService::GenerationService(
 	    skin_improve_runner_,
 	    smile_edit_runner_,
 	    glam_makeup_runner_,
+	    change_scene_runner_,
 	    tool_action_runner_,
 	    prompt_runner_
 	}
@@ -184,14 +195,42 @@ std::string GenerationService::ChooseWorkflow(const std::string& action) const {
     if (action == "ai_enhancer") {
         return "workflows/ai_enhancer.json";
     }
-    
+
+    if (action == "remove_objects") {
+        return "workflows/remove_objects_inpaint.json";
+    }
+
     if (action == "remove_objects_cleanup") {
-	    return "workflows/remove_objects_cleanup_inpaint.json";
+        return "workflows/remove_objects_cleanup_inpaint.json";
+    }
+
+    if (action == "remove_background") {
+        return "action_runners/remove_background";
+    }
+
+    if (action == "upscale_image") {
+        return "action_runners/upscale_image";
+    }
+
+    if (action == "skin_improve") {
+        return "workflows/tool_img2img.json";
+    }
+
+    if (action == "smile_edit") {
+        return "workflows/smile_edit_liveportrait.json";
+    }
+
+    if (action == "glam_makeup") {
+        return "action_runners/glam_makeup";
+    }
+
+    if (action == "change_scene") {
+	    return "workflows/change_scene_background.json";
 	}
-	
-	if (action == "upscale_image") {
-	    return "action_runners/upscale_image";
-	}
+
+    if (action == "prompt") {
+        return "action_runners/prompt";
+    }
 
     if (IsToolAction(action)) {
         return "workflows/tool_img2img.json";

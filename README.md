@@ -1,445 +1,363 @@
-# 🎛️ feature/prompt-platform
+# feature/change-scene-runner
 
-| Branch                    | Parent                                            | Goal                                             | Main Result                                              | Glam Makeup    | Prompt Translator | Face Masks      | Remove Objects        | AI Enhancer | Upscale         | Assets           | Back                                                                                  |
-| ------------------------- | ------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------- | -------------- | ----------------- | --------------- | --------------------- | ----------- | --------------- | ---------------- | ------------------------------------------------------------------------------------- |
-| `feature/prompt-platform` | after Remove Objects / Templates / Tools branches | create shared platform for prompt-driven editing | modular runners + local face editing + organized scripts | local pipeline | Qwen              | MediaPipe masks | auto + manual cleanup | preserved   | local/tool flow | 30 README images | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
+| Branch                        | Previous                     | Next                                                                                | Status     | Main Goal                                           | Problem Before                                                                | Main Change                                                            | Added Runner        | Added Workflow                 | Added Script                         | Updated Prompt Layer       | Result                                        | Back                                                                                  |
+| ----------------------------- | ---------------------------- | ----------------------------------------------------------------------------------- | ---------- | --------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------- | ------------------------------ | ------------------------------------ | -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `feature/change-scene-runner` | `feature/glam-makeup-runner` | `feature/hair-studio-runner` / `feature/ghostface-runner` / `feature/ghibli-runner` | ✅ Finished | вынести `change_scene` из общего `ToolActionRunner` | old inpaint pipeline давал серый фон, грязные края и плохую реакцию на prompt | новый pipeline: cutout subject → generate background → composite final | `ChangeSceneRunner` | `change_scene_background.json` | `composite_subject_on_background.py` | `BuildChangeScenePrompt()` | нормальный scene replacement без старого фона | [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |
 
 ---
 
-## 🌳 Project structure
+## Final Architecture
+
+| Action         | Runner              | Prompt Builder                            | Subject Cutout                     | Background Generation          | Final Composite                      | Output                              |
+| -------------- | ------------------- | ----------------------------------------- | ---------------------------------- | ------------------------------ | ------------------------------------ | ----------------------------------- |
+| `change_scene` | `ChangeSceneRunner` | `PromptBuilder::BuildChangeScenePrompt()` | `remove_background.py transparent` | ComfyUI text-to-image workflow | `composite_subject_on_background.py` | `/outputs/pixo_change_scene_...png` |
 
 ```text
-mobile-assets-backend/
-├── CMakeLists.txt
-├── README.md
-├── conanfile.txt
-├── data/
-│   ├── onboarding.json
-│   ├── templates.json
-│   └── tools.json
-├── models/
-│   ├── local/
-│   │   └── sam_vit_b_01ec64.pth
-│   └── mediapipe/
-│       └── face_landmarker.task
-├── readme_assets/
-│   ├── ai_enhancer/
-│   │   ├── ai_enhancer_1.png
-│   │   ├── ai_enhancer_2.png
-│   │   ├── input.jpg
-│   │   └── upscale.png
-│   ├── glam_makeup/
-│   │   ├── blue_lips.png
-│   │   ├── evening_glam.png
-│   │   ├── green_brows.png
-│   │   ├── green_eyes.png
-│   │   ├── input.jpg
-│   │   ├── smile_level_3.png
-│   │   └── soft_pink_blush.png
-│   ├── remove_background/
-│   │   ├── input.jpg
-│   │   ├── transparent.png
-│   │   └── white_background.png
-│   ├── remove_objects/
-│   │   ├── auto_remove.png
-│   │   ├── input.jpg
-│   │   └── manual_cleanup.png
-│   ├── showcase/
-│   │   ├── black_eyes.png
-│   │   ├── evening_glam_1.png
-│   │   ├── evening_glam_2.png
-│   │   ├── evening_glam_3.png
-│   │   ├── ghibli.png
-│   │   ├── green_eyes.png
-│   │   ├── green_lips.png
-│   │   ├── input.jpg
-│   │   ├── red_lips.png
-│   │   ├── remove_background.png
-│   │   └── smile_level_3.png
-│   └── skin_clean/
-│       ├── input.png
-│       └── output.png
-├── scripts/
-│   ├── background/
-│   │   └── remove_background.py
-│   ├── common/
-│   │   └── convert_image_to_png.py
-│   ├── face/
-│   │   ├── makeup/
-│   │   │   ├── __init__.py
-│   │   │   ├── apply_face_makeup.py
-│   │   │   └── renderers/
-│   │   │       ├── __init__.py
-│   │   │       ├── brow_renderer.py
-│   │   │       ├── cheek_renderer.py
-│   │   │       ├── common.py
-│   │   │       ├── eye_renderer.py
-│   │   │       └── lip_renderer.py
-│   │   ├── masks/
-│   │   │   └── create_face_region_mask.py
-│   │   └── unused/
-│   │       └── apply_glam_makeup_overlay.py
-│   ├── generation/
-│   │   └── create_prompt_collage.py
-│   ├── objects/
-│   │   ├── auto/
-│   │   │   └── create_object_mask_sam.py
-│   │   ├── common/
-│   │   │   └── apply_inpaint_mask.py
-│   │   └── manual/
-│   │       └── prepare_manual_cleanup_mask.py
-│   ├── unused/
-│   │   ├── create_object_mask.py
-│   │   └── remove_objects.py
-│   └── upscale/
-│       └── upscale_image.py
-├── src/
-│   ├── action_runners/
-│   │   ├── ai_enhancer_runner.cpp
-│   │   ├── ai_enhancer_runner.h
-│   │   ├── glam_makeup_runner.cpp
-│   │   ├── glam_makeup_runner.h
-│   │   ├── prompt_runner.cpp
-│   │   ├── prompt_runner.h
-│   │   ├── remove_background_runner.cpp
-│   │   ├── remove_background_runner.h
-│   │   ├── remove_objects_cleanup_runner.cpp
-│   │   ├── remove_objects_cleanup_runner.h
-│   │   ├── remove_objects_mask_runner.cpp
-│   │   ├── remove_objects_mask_runner.h
-│   │   ├── remove_objects_runner.cpp
-│   │   ├── remove_objects_runner.h
-│   │   ├── skin_improve_runner.cpp
-│   │   ├── skin_improve_runner.h
-│   │   ├── smile_edit_runner.cpp
-│   │   ├── smile_edit_runner.h
-│   │   ├── template_runner.cpp
-│   │   ├── template_runner.h
-│   │   ├── tool_action_runner.cpp
-│   │   ├── tool_action_runner.h
-│   │   ├── upscale_runner.cpp
-│   │   └── upscale_runner.h
-│   ├── comfy/
-│   │   ├── comfy_client.cpp
-│   │   ├── comfy_client.h
-│   │   ├── workflow_builder.cpp
-│   │   └── workflow_builder.h
-│   ├── face_edit/
-│   │   ├── face_edit_plan.cpp
-│   │   ├── face_edit_plan.h
-│   │   ├── face_editor.cpp
-│   │   ├── face_editor.h
-│   │   ├── face_masks.cpp
-│   │   ├── face_masks.h
-│   │   ├── face_parser.cpp
-│   │   ├── face_parser.h
-│   │   ├── face_regions.cpp
-│   │   └── face_regions.h
-│   ├── generation/
-│   │   ├── generation_action_router.cpp
-│   │   ├── generation_action_router.h
-│   │   ├── generation_json.cpp
-│   │   ├── generation_json.h
-│   │   ├── generation_task_store.cpp
-│   │   ├── generation_task_store.h
-│   │   ├── generation_tool_prompts.cpp
-│   │   └── generation_tool_prompts.h
-│   ├── prompt/
-│   │   ├── prompt_builder.cpp
-│   │   ├── prompt_builder.h
-│   │   ├── prompt_normalizer.cpp
-│   │   ├── prompt_normalizer.h
-│   │   ├── prompt_templates.cpp
-│   │   ├── prompt_templates.h
-│   │   ├── prompt_translator.cpp
-│   │   └── prompt_translator.h
-│   ├── api_handler.cpp
-│   ├── api_handler.h
-│   ├── catalog_service.cpp
-│   ├── catalog_service.h
-│   ├── generation_service.cpp
-│   ├── generation_service.h
-│   ├── http_server.cpp
-│   ├── http_server.h
-│   ├── main.cpp
-│   ├── output_service.cpp
-│   ├── output_service.h
-│   ├── template_asset_service.cpp
-│   ├── template_asset_service.h
-│   ├── upload_service.cpp
-│   └── upload_service.h
-├── storage/
-│   ├── input/
-│   ├── output/
-│   ├── template_cache/
-│   ├── tasks.backup.json
-│   └── tasks.json
-├── tools/
-│   └── realesrgan-ncnn-vulkan/
-└── workflows/
-    ├── ai_enhancer.json
-    ├── remove_objects_cleanup_inpaint.json
-    ├── remove_objects_inpaint.json
-    ├── smile_edit_liveportrait.json
-    ├── template_img2img.json
-    └── tool_img2img.json
+change_scene
+↓
+ChangeSceneRunner
+↓
+PromptBuilder::BuildChangeScenePrompt
+↓
+remove_background.py transparent
+↓
+ComfyUI generates new background
+↓
+composite_subject_on_background.py
+↓
+final output
 ```
 
 ---
 
-## ✅ What changed
+## What Was Wrong Before
 
-| #  | Area               | Before                          | After                                | Result                           |
-| -- | ------------------ | ------------------------------- | ------------------------------------ | -------------------------------- |
-| 1  | Prompt platform    | direct action logic was mixed   | action runners + prompt modules      | cleaner architecture             |
-| 2  | Glam Makeup        | mostly ComfyUI / SDXL           | local face editing pipeline          | stable face-preserving makeup    |
-| 3  | Prompt translation | manual `RU_TO_EN` dictionary    | Qwen translation                     | better multilingual prompts      |
-| 4  | Face masks         | no stable region masks          | `FaceMasks` + MediaPipe face regions | local makeup by exact area       |
-| 5  | Python scripts     | flat `scripts/` folder          | grouped by domain                    | easier maintenance               |
-| 6  | Makeup renderers   | one big script idea             | per-region renderers                 | lips/cheeks/eyes/brows separated |
-| 7  | Remove Objects     | auto + manual cleanup preserved | organized script paths               | cleaner Remove Objects pipeline  |
-| 8  | Upscale            | moved to `scripts/upscale/`     | local upscale script location        | clearer tool domain              |
-| 9  | README assets      | scattered examples              | organized showcase assets            | visual documentation             |
-| 10 | Generation service | still central but lighter       | runners/helpers used                 | platform direction established   |
+| Old Approach                     | Problem                                      | Result                      |
+| -------------------------------- | -------------------------------------------- | --------------------------- |
+| original image + background mask | SDXL tried to inpaint huge background area   | weak scene change           |
+| `VAEEncodeForInpaint`            | not good for full background replacement     | gray / muddy background     |
+| old background mask              | edges around person stayed dirty             | outline around hair/body    |
+| prompt like `sunset beach`       | SDXL reacted weakly                          | scene did not really change |
+| ToolActionRunner route           | `change_scene` was treated like generic tool | no dedicated logic          |
 
 ---
 
-## 💄 Glam Makeup handover
+## Correct Solution
 
-| Item              | Old behavior                   | New behavior                                             |
-| ----------------- | ------------------------------ | -------------------------------------------------------- |
-| Main route        | prompt → Comfy workflow → SDXL | prompt → Qwen → Face Parser → Face Mask → local renderer |
-| Face preservation | unstable                       | strong                                                   |
-| Lipstick          | partial / unpredictable        | local lips renderer                                      |
-| Blush             | could appear anywhere          | local cheeks renderer                                    |
-| Eye color         | unpredictable                  | local iris/eyes renderer                                 |
-| Eyelids           | SDXL guessed                   | local eyelids support                                    |
-| Eyebrows          | not supported                  | local eyebrows support                                   |
-| Speed             | slow when SDXL used            | fast local processing for supported regions              |
-| Identity          | could change                   | preserved for local edits                                |
+| Step | What Happens                          | Why                         |
+| ---- | ------------------------------------- | --------------------------- |
+| 1    | cut person from original image        | keep user/person intact     |
+| 2    | generate new background separately    | do not fight old background |
+| 3    | composite subject over new background | clean final image           |
+| 4    | save final output                     | standard backend result URL |
 
 ---
 
-## 🧠 New Glam Makeup architecture
+## Files Added
 
-| Layer                 | Responsibility                                           | Files                                           |
-| --------------------- | -------------------------------------------------------- | ----------------------------------------------- |
-| Prompt Translator     | converts user prompt to English / normalized instruction | `src/prompt/prompt_translator.*`                |
-| Face Parser           | detects target face region from text                     | `src/face_edit/face_parser.cpp`                 |
-| Face Regions          | enum/string mapping for editable regions                 | `src/face_edit/face_regions.*`                  |
-| Face Masks            | calls Python mask generator                              | `src/face_edit/face_masks.*`                    |
-| Python Mask Generator | creates RGBA mask for selected face area                 | `scripts/face/masks/create_face_region_mask.py` |
-| Makeup Router         | routes region to correct renderer                        | `scripts/face/makeup/apply_face_makeup.py`      |
-| Renderers             | apply local color/blend effect                           | `scripts/face/makeup/renderers/*.py`            |
-| Runner                | orchestrates local vs Comfy fallback                     | `src/action_runners/glam_makeup_runner.*`       |
+| Type         | File                                               | Purpose                                                 |
+| ------------ | -------------------------------------------------- | ------------------------------------------------------- |
+| new runner   | `src/action_runners/change_scene_runner.h`         | declaration for Change Scene runner                     |
+| new runner   | `src/action_runners/change_scene_runner.cpp`       | full Change Scene execution pipeline                    |
+| new workflow | `workflows/change_scene_background.json`           | text-to-image background-only Comfy workflow            |
+| new script   | `scripts/scene/composite_subject_on_background.py` | composite transparent subject over generated background |
 
 ---
 
-## 🎨 Supported local makeup regions
+## Files Updated
 
-| Region       | Status           | Renderer / Logic                 | Notes                          |
-| ------------ | ---------------- | -------------------------------- | ------------------------------ |
-| lips         | ✅                | `lip_renderer.py`                | upper + lower lips fixed       |
-| cheeks       | ✅                | `cheek_renderer.py`              | soft ellipse + blur            |
-| eyes         | ✅                | `eye_renderer.py`                | iris color changes             |
-| eyelids      | ✅                | eye/eyelid logic                 | eyeshadow support              |
-| eyebrows     | ✅                | `brow_renderer.py`               | new region                     |
-| skin         | partial/fallback | local or Comfy depending request | complex retouch can need model |
-| face         | fallback         | Comfy when broad style requested | full style generation          |
-| face contour | fallback         | future local support             | not core in this branch        |
-
----
-
-## 🧩 Python package structure
-
-| File / Folder                               | Why it exists                     |
-| ------------------------------------------- | --------------------------------- |
-| `scripts/face/makeup/__init__.py`           | marks makeup as Python package    |
-| `scripts/face/makeup/renderers/__init__.py` | marks renderers as Python package |
-| `renderers/common.py`                       | shared blending/color helpers     |
-| `lip_renderer.py`                           | lip color and lipstick effects    |
-| `cheek_renderer.py`                         | blush rendering                   |
-| `eye_renderer.py`                           | iris/eye coloring                 |
-| `brow_renderer.py`                          | eyebrow coloring                  |
+| File                                          | Change                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| `src/prompt/prompt_builder.h`                 | added `ChangeScenePromptResult` and `BuildChangeScenePrompt(...)` |
+| `src/prompt/prompt_builder.cpp`               | builds background-only positive prompt                            |
+| `src/comfy/workflow_builder.h`                | added `BuildChangeSceneBackgroundWorkflow(...)`                   |
+| `src/comfy/workflow_builder.cpp`              | loads and fills `change_scene_background.json`                    |
+| `src/generation/generation_action_router.h`   | added `ChangeSceneRunner` dependency                              |
+| `src/generation/generation_action_router.cpp` | routes `serverAction=change_scene`                                |
+| `src/generation_service.h`                    | added `change_scene_runner_` member                               |
+| `src/generation_service.cpp`                  | constructs runner and passes it to router                         |
+| `CMakeLists.txt`                              | added `src/action_runners/change_scene_runner.cpp`                |
 
 ---
 
-## 🗣️ Prompt Translator
+## Removed / Moved To Unused
 
-| Before                       | After                         |
-| ---------------------------- | ----------------------------- |
-| manual `RU_TO_EN` dictionary | Qwen-based translation        |
-| limited phrases              | flexible natural prompts      |
-| fragile mapping              | better region/color detection |
-
-| Example input             | Translated / normalized meaning |
-| ------------------------- | ------------------------------- |
-| `зелёные брови`           | `Green eyebrows`                |
-| `синий карандаш для глаз` | `Blue eyeliner`                 |
-| `фиолетовая помада`       | `Purple lipstick`               |
-| `мягкие розовые румяна`   | `Soft pink blush`               |
+| Old File                                        | New Place / Status                           | Reason                                        |
+| ----------------------------------------------- | -------------------------------------------- | --------------------------------------------- |
+| `scripts/scene/create_background_mask.py`       | `scripts/unused/scene/`                      | no longer needed                              |
+| `scripts/scene/apply_change_scene_composite.py` | `scripts/unused/scene/`                      | replaced by subject-over-background composite |
+| `workflows/change_scene_inpaint.json`           | `workflows/unused_change_scene_inpaint.json` | old inpaint pipeline rejected                 |
 
 ---
 
-## 🧴 Local Makeup technology
+## New Workflow
 
-| Technology       | Purpose                                |
-| ---------------- | -------------------------------------- |
-| MediaPipe        | face landmarks and face regions        |
-| OpenCV           | mask processing / blur / geometry      |
-| Pillow           | image loading, RGBA, blending          |
-| Python renderers | local makeup effects                   |
-| C++ runners      | orchestration and routing              |
-| ComfyUI          | fallback for complex generative styles |
+| Workflow                                 | Type                          | Uses                                                                                                 | Does NOT Use          |
+| ---------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------- |
+| `workflows/change_scene_background.json` | text-to-image background only | `CheckpointLoaderSimple`, `EmptyLatentImage`, `CLIPTextEncode`, `KSampler`, `VAEDecode`, `SaveImage` | `VAEEncodeForInpaint` |
 
----
+Important:
 
-## 🔁 Glam Makeup routing
-
-| Request type            | Route            |
-| ----------------------- | ---------------- |
-| simple lips color       | local renderer   |
-| simple blush            | local renderer   |
-| eye color               | local renderer   |
-| eyelids / eyeshadow     | local renderer   |
-| eyebrows color          | local renderer   |
-| broad glam style        | ComfyUI fallback |
-| complex artistic makeup | ComfyUI fallback |
-| unsupported region      | ComfyUI fallback |
+```text
+There must be no VAEEncodeForInpaint in change_scene_background.json.
+```
 
 ---
 
-## 🧽 Remove Objects state
+## Prompt Logic
 
-| Flow                                   | Status    |
-| -------------------------------------- | --------- |
-| Auto Remove Objects                    | preserved |
-| SAM-based object mask                  | preserved |
-| ComfyUI inpaint                        | preserved |
-| post-composite outside mask            | preserved |
-| Manual cleanup                         | preserved |
-| Scripts moved under `scripts/objects/` | done      |
-
----
-
-## 🧼 Remove Background state
-
-| Flow                                                      | Status    |
-| --------------------------------------------------------- | --------- |
-| white background                                          | supported |
-| transparent alpha PNG                                     | supported |
-| script moved to `scripts/background/remove_background.py` | done      |
-| runner path updated                                       | done      |
+| Layer                      | Output                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| user prompt                | `пляж на закате` / `sunset beach`                                                 |
+| translator                 | English scene text                                                                |
+| `BuildChangeScenePrompt()` | background-only generation prompt                                                 |
+| positive prompt            | realistic background scene only, natural photo background, scene: Beach at sunset |
+| negative prompt            | person, people, human, face, body, silhouette, portrait, character                |
 
 ---
 
-## 🔎 Visual examples — Glam Makeup
+## Background Prompt
 
-| Input                                    | Evening Glam                                    | Green Brows                                    | Green Eyes                                    | Blue Lips                                    | Soft Pink Blush                                    | Smile Level 3                                    |
-| ---------------------------------------- | ----------------------------------------------- | ---------------------------------------------- | --------------------------------------------- | -------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ |
-| ![](readme_assets/glam_makeup/input.jpg) | ![](readme_assets/glam_makeup/evening_glam.png) | ![](readme_assets/glam_makeup/green_brows.png) | ![](readme_assets/glam_makeup/green_eyes.png) | ![](readme_assets/glam_makeup/blue_lips.png) | ![](readme_assets/glam_makeup/soft_pink_blush.png) | ![](readme_assets/glam_makeup/smile_level_3.png) |
-
----
-
-## 🔎 Visual examples — Remove Objects
-
-| Input                                       | Auto Remove                                       | Manual Cleanup                                       |
-| ------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
-| ![](readme_assets/remove_objects/input.jpg) | ![](readme_assets/remove_objects/auto_remove.png) | ![](readme_assets/remove_objects/manual_cleanup.png) |
+```text
+realistic background scene only
+no people
+no person
+no human
+natural photo background
+scene: Beach at sunset
+```
 
 ---
 
-## 🔎 Visual examples — Skin Clean
+## Negative Prompt
 
-| Input                                   | Output                                   |
-| --------------------------------------- | ---------------------------------------- |
-| ![](readme_assets/skin_clean/input.png) | ![](readme_assets/skin_clean/output.png) |
-
----
-
-## 🔎 Visual examples — AI Enhancer / Upscale
-
-| Input                                    | AI Enhancer 1                                    | AI Enhancer 2                                    | Upscale                                    |
-| ---------------------------------------- | ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------ |
-| ![](readme_assets/ai_enhancer/input.jpg) | ![](readme_assets/ai_enhancer/ai_enhancer_1.png) | ![](readme_assets/ai_enhancer/ai_enhancer_2.png) | ![](readme_assets/ai_enhancer/upscale.png) |
+```text
+person, people, human, face, body, silhouette, portrait, character
+```
 
 ---
 
-## 🔎 Visual examples — Remove Background
+## ChangeSceneRunner Pipeline
 
-| Input                                          | White Background                                          | Transparent                                          |
-| ---------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
-| ![](readme_assets/remove_background/input.jpg) | ![](readme_assets/remove_background/white_background.png) | ![](readme_assets/remove_background/transparent.png) |
-
----
-
-## 🔎 Visual showcase
-
-| Input                                 | Ghibli                                 | Remove Background                                 | Evening Glam 1                                 | Evening Glam 2                                 | Evening Glam 3                                 | Green Lips                                 | Green Eyes                                 | Black Eyes                                 | Red Lips                                 | Smile Level 3                                 |
-| ------------------------------------- | -------------------------------------- | ------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ | ---------------------------------------- | --------------------------------------------- |
-| ![](readme_assets/showcase/input.jpg) | ![](readme_assets/showcase/ghibli.png) | ![](readme_assets/showcase/remove_background.png) | ![](readme_assets/showcase/evening_glam_1.png) | ![](readme_assets/showcase/evening_glam_2.png) | ![](readme_assets/showcase/evening_glam_3.png) | ![](readme_assets/showcase/green_lips.png) | ![](readme_assets/showcase/green_eyes.png) | ![](readme_assets/showcase/black_eyes.png) | ![](readme_assets/showcase/red_lips.png) | ![](readme_assets/showcase/smile_level_3.png) |
-
----
-
-## 📦 Current git status summary
-
-| Category                  | Files                                                                                                                                                                                                                                                                                                                             |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| renamed scripts           | `scripts/background/remove_background.py`, `scripts/common/convert_image_to_png.py`, `scripts/generation/create_prompt_collage.py`, `scripts/objects/auto/create_object_mask_sam.py`, `scripts/objects/common/apply_inpaint_mask.py`, `scripts/objects/manual/prepare_manual_cleanup_mask.py`, `scripts/upscale/upscale_image.py` |
-| unused scripts moved      | `scripts/unused/create_object_mask.py`, `scripts/unused/remove_objects.py`                                                                                                                                                                                                                                                        |
-| modified runners          | `glam_makeup_runner`, `prompt_runner`, `remove_background_runner`, `remove_objects_*`, `template_runner`, `upscale_runner`                                                                                                                                                                                                        |
-| modified face edit        | `face_edit_plan`, `face_masks`, `face_parser`, `face_regions`                                                                                                                                                                                                                                                                     |
-| modified prompt           | `prompt_builder`                                                                                                                                                                                                                                                                                                                  |
-| new folders               | `scripts/face/`, `models/mediapipe/`, `readme_assets/*`                                                                                                                                                                                                                                                                           |
-| deleted old README assets | old `readme_assets/remove_objects_manual/*`                                                                                                                                                                                                                                                                                       |
+| Step      | Log                                   | Description                      |
+| --------- | ------------------------------------- | -------------------------------- |
+| start     | `[CHANGE_SCENE_RUNNER_START]`         | runner started                   |
+| prompt    | `[CHANGE_SCENE_PROMPT_BUILT]`         | prompt prepared                  |
+| cutout    | `[CHANGE_SCENE_SUBJECT_CUTOUT_START]` | remove background transparent    |
+| workflow  | `[CHANGE_SCENE_WORKFLOW_JSON]`        | background workflow built        |
+| queue     | `[COMFY_QUEUE_RESPONSE]`              | ComfyUI accepted prompt          |
+| history   | `[COMFY_HISTORY_OUTPUT]`              | output detected                  |
+| download  | `[COMFY_DOWNLOAD_OK]`                 | background downloaded            |
+| composite | `[CHANGE_SCENE_COMPOSITE_START]`      | subject composited on background |
+| success   | `[CHANGE_SCENE_SUCCESS]`              | final output ready               |
 
 ---
 
-## ⚠️ Important note about README assets
+## Final Expected Log
 
-| Old folder                             | Current folders                                                     |
-| -------------------------------------- | ------------------------------------------------------------------- |
-| `readme_assets/remove_objects_manual/` | replaced by `readme_assets/remove_objects/`                         |
-| old manual examples deleted            | new remove objects examples live in `readme_assets/remove_objects/` |
+```text
+workflow=workflows/change_scene_background.json
 
----
-
-## ✅ Final result
-
-| Capability                                | Status |
-| ----------------------------------------- | ------ |
-| modular action runners                    | ✅      |
-| organized script folders                  | ✅      |
-| local Glam Makeup pipeline                | ✅      |
-| Qwen prompt translator                    | ✅      |
-| MediaPipe face masks                      | ✅      |
-| lips/cheeks/eyes/eyelids/eyebrows support | ✅      |
-| Remove Objects auto/manual preserved      | ✅      |
-| Remove Background preserved               | ✅      |
-| Skin Clean examples                       | ✅      |
-| AI Enhancer/Upscale examples              | ✅      |
-| README visual showcase                    | ✅      |
-| ComfyUI fallback for complex styles       | ✅      |
+[CHANGE_SCENE_RUNNER_START]
+[PROMPT_TRANSLATED]
+[CHANGE_SCENE_PROMPT_BUILT]
+[CHANGE_SCENE_SUBJECT_CUTOUT_START]
+[CHANGE_SCENE_WORKFLOW_JSON]
+EmptyLatentImage
+[COMFY_QUEUE_RESPONSE]
+[COMFY_HISTORY_OUTPUT]
+[COMFY_DOWNLOAD_OK]
+[CHANGE_SCENE_COMPOSITE_START]
+[CHANGE_SCENE_SUCCESS]
+```
 
 ---
 
-## 🧾 Commit checklist
+## Bad Logs
+
+| Bad Log                                | Meaning                                       |
+| -------------------------------------- | --------------------------------------------- |
+| `VAEEncodeForInpaint`                  | old inpaint workflow is still used            |
+| `workflow=workflows/tool_img2img.json` | request still goes through `ToolActionRunner` |
+| `change_scene_inpaint.json`            | old workflow not removed from route           |
+| gray background                        | old inpaint flow or weak background workflow  |
+| old outline around person              | subject cutout/composite not used correctly   |
+
+---
+
+## Screenshots / README Assets
+
+| Preview             | Path                                                 |
+| ------------------- | ---------------------------------------------------- |
+| Input               | `readme_assets/change_scene/input.jpg`               |
+| Output sunset beach | `readme_assets/change_scene/output_sunset_beach.png` |
+
+```md
+## Visual Result
+
+| Input | Output: Sunset Beach |
+|---|---|
+| ![](readme_assets/change_scene/input.jpg) | ![](readme_assets/change_scene/output_sunset_beach.png) |
+```
+
+---
+
+## README Assets Tree
+
+```text
+readme_assets/
+├── ai_enhancer/
+│   ├── input.jpg
+│   ├── output_1.png
+│   └── output_2.png
+├── change_scene/
+│   ├── input.jpg
+│   └── output_sunset_beach.png
+├── glam_makeup/
+│   ├── input.jpg
+│   └── output_soft_pink_blush.png
+├── remove_background/
+│   ├── input.jpg
+│   └── output.png
+├── remove_objects/
+│   ├── input.jpg
+│   ├── output_auto.png
+│   └── output_manual.png
+├── skin_clean/
+│   ├── input.jpg
+│   └── output.png
+└── smile/
+    ├── input.jpg
+    └── output.png
+```
+
+---
+
+## Visual Result
+
+| Input                                     | Output: Sunset Beach                                    |
+| ----------------------------------------- | ------------------------------------------------------- |
+| ![](readme_assets/change_scene/input.jpg) | ![](readme_assets/change_scene/output_sunset_beach.png) |
+
+---
+
+## ToolActionRunner Cleanup
+
+| Removed From `IsToolAction` | Reason                         |
+| --------------------------- | ------------------------------ |
+| `change_scene`              | now has `ChangeSceneRunner`    |
+| `glam_makeup`               | already has `GlamMakeupRunner` |
+| `remove_background`         | has `RemoveBackgroundRunner`   |
+| `skin_improve`              | has `SkinImproveRunner`        |
+| `upscale_image`             | has `UpscaleRunner`            |
+| `smile_edit`                | has `SmileEditRunner`          |
+
+Remaining temporary generic tools:
+
+```text
+ghibli
+ghostface
+hair_studio
+```
+
+---
+
+## Validation Commands
+
+| Check          | Command                                                                   | Expected                |                          |
+| -------------- | ------------------------------------------------------------------------- | ----------------------- | ------------------------ |
+| references     | `grep -R "change_scene" -n src                                            | head -50`               | runner/router references |
+| builder        | `grep -R "BuildChangeSceneBackgroundWorkflow" -n src`                     | method exists           |                          |
+| workflow       | `grep -R "change_scene_background" -n src workflows`                      | route uses new workflow |                          |
+| no old inpaint | `grep -R "VAEEncodeForInpaint" -n workflows/change_scene_background.json` | no output               |                          |
+| build          | `cmake --build . --clean-first`                                           | success                 |                          |
+
+---
+
+## Build
 
 ```bash
-cd ~/mobile-assets-backend
-
-git add .
-git status
-
-git commit -m "Add prompt platform and local face editing pipeline"
-
-git push -u origin feature/prompt-platform
+cd ~/mobile-assets-backend/build
+cmake --build . --clean-first
 ```
 
 ---
 
-## ⬅️ Назад
+## Run
 
-| Link        | URL                                                                    |
-| ----------- | ---------------------------------------------------------------------- |
-| Main README | https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md |
+```bash
+PUBLIC_BASE_URL="http://192.168.0.177:8080" \
+COMFY_BASE_URL="https://YOUR_COMFY.trycloudflare.com" \
+PROMPT_TRANSLATOR_BASE_URL="https://YOUR_TRANSLATOR.trycloudflare.com" \
+./bin/mobile_assets_backend
+```
+
+---
+
+## Test Request
+
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:8080/generations \
+-H "Content-Type: application/json" \
+-d '{
+  "serverAction": "change_scene",
+  "toolType": "CHANGE_SCENE",
+  "sourceImageUrl": "http://192.168.0.177:8080/uploads/YOUR_TEST_IMAGE.jpg",
+  "prompt": "Beach at sunset",
+  "outputCount": 1
+}')
+
+echo "$RESPONSE" | jq
+TASK_ID=$(echo "$RESPONSE" | jq -r ".taskId")
+watch -n 3 "curl -s http://localhost:8080/generations/$TASK_ID | jq"
+```
+
+---
+
+## Expected Result
+
+| Field                | Value                               |
+| -------------------- | ----------------------------------- |
+| `status`             | `completed`                         |
+| `progressPercent`    | `100`                               |
+| `resultImageUrls[0]` | `/outputs/pixo_change_scene_...png` |
+| person               | preserved from original             |
+| background           | newly generated                     |
+| old background       | removed                             |
+| gray background      | absent                              |
+| dirty old outline    | reduced/removed                     |
+
+---
+
+## Final State
+
+| Item                                                 | Status                                   |
+| ---------------------------------------------------- | ---------------------------------------- |
+| `ChangeSceneRunner`                                  | added                                    |
+| `change_scene` removed from generic ToolActionRunner | ✅                                        |
+| old inpaint workflow                                 | removed/unused                           |
+| new background-only workflow                         | ✅                                        |
+| subject cutout                                       | via existing `remove_background.py`      |
+| final composite                                      | via `composite_subject_on_background.py` |
+| PromptBuilder support                                | ✅                                        |
+| WorkflowBuilder support                              | ✅                                        |
+| README assets                                        | ✅                                        |
+| next candidates                                      | `hair_studio`, `ghostface`, `ghibli`     |
+
+---
+
+## Commit
+
+```bash
+git add .
+git commit -m "Extract change scene runner"
+git push -u origin feature/change-scene-runner
+```
+
+---
+
+## Back
+
+| Link                                                                                  |
+| ------------------------------------------------------------------------------------- |
+| [Main README](https://github.com/amanzhola/mobile-assets-backend/blob/main/README.md) |

@@ -18,6 +18,7 @@
 #include "action_runners/skin_improve_runner.h"
 #include "action_runners/smile_edit_runner.h"
 #include "action_runners/glam_makeup_runner.h"
+#include "action_runners/change_scene_runner.h"
 #include "prompt/prompt_translator.h"
 #include "prompt/prompt_builder.h"
 
@@ -133,6 +134,7 @@ private:
 	action_runners::SkinImproveRunner skin_improve_runner_;
 	action_runners::SmileEditRunner smile_edit_runner_;
 	action_runners::GlamMakeupRunner glam_makeup_runner_;
+	action_runners::ChangeSceneRunner change_scene_runner_;
 	
 	GenerationActionRouter action_router_;
 };

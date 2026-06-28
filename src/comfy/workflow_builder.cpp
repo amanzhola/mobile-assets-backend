@@ -358,7 +358,10 @@ json::object WorkflowBuilder::BuildRemoveObjectsInpaintWorkflow(
         LoadWorkflowTemplate("remove_objects_inpaint.json");
 
     const std::string negative_prompt =
-    "changed person, removed head, removed face, changed face, green color mismatch, mismatched background, different lighting, blurry, low quality, artifacts, watermark, text";
+    "gray patch, solid color patch, blurry patch, object remains, partial object, "
+    "umbrella, dome, handle, outline, artifact, smudge, watermark, text, " 
+    "changed person, removed head, removed face, changed face, green color mismatch, "
+	"mismatched background, different lighting, blurry, low quality, artifacts, watermark, text";
 
     const int64_t seed =
         static_cast<int64_t>(
@@ -384,6 +387,41 @@ json::object WorkflowBuilder::BuildRemoveObjectsInpaintWorkflow(
         workflow_value,
         "{{mask_image}}",
         mask_image_file_name
+    );
+
+    return workflow_value.as_object();
+}
+
+json::object WorkflowBuilder::BuildChangeSceneBackgroundWorkflow(
+    const std::string& output_prefix,
+    const std::string& positive_prompt
+) const {
+    json::object workflow =
+        LoadWorkflowTemplate("change_scene_background.json");
+
+    const std::string negative_prompt =
+        "person, people, human, face, body, silhouette, portrait, character, "
+        "gray background, plain background, flat color, low quality, blurry, "
+        "watermark, text, logo, artifacts";
+
+    const int64_t seed =
+        static_cast<int64_t>(
+            std::chrono::steady_clock::now()
+                .time_since_epoch()
+                .count() % 2147483647
+        );
+
+    json::value workflow_value = workflow;
+
+    ReplacePlaceholders(
+        workflow_value,
+        "",
+        "",
+        output_prefix,
+        positive_prompt,
+        negative_prompt,
+        1.0,
+        seed
     );
 
     return workflow_value.as_object();

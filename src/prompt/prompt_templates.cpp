@@ -24,4 +24,11 @@ std::string GlamMakeupPresetPrompt(
     return "natural glam makeup, realistic beauty makeup, clean skin, elegant face";
 }
 
+std::string ChangeSceneBasePrompt() {
+    return
+        "change only the background scene, preserve the exact same person, "
+        "preserve face identity, preserve body pose, preserve clothing, "
+        "preserve camera angle and composition, realistic photo, natural lighting";
+}
+
 }  // namespace prompt

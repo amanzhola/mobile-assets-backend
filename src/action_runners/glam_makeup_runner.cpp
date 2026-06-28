@@ -432,9 +432,46 @@ std::optional<std::string> GlamMakeupRunner::Run(
         }
 
         update_progress(92);
-
-        const fs::path saved_output_file =
-            output_service_.SaveFromComfyOutput(local_comfy_output_file);
+		
+		const std::string composite_output_name =
+		    "final_pixo_change_scene_" + task_id + "_" +
+		    std::to_string(image_index) + ".png";
+		
+		const fs::path composite_output_file =
+		    comfy_output_dir_ / composite_output_name;
+		
+		std::ostringstream composite_command;
+		composite_command
+		    << "cd " << ShellQuote(project_root_.string()) << " && "
+		    << ".venv-tools/bin/python3 scripts/scene/apply_change_scene_composite.py "
+		    << ShellQuote(backend_input_file.string()) << " "
+		    << ShellQuote(local_comfy_output_file.string()) << " "
+		    << ShellQuote(composite_output_file.string());
+		
+		std::cout
+		    << "[CHANGE_SCENE_COMPOSITE_START]\n"
+		    << "command=" << composite_command.str() << "\n"
+		    << std::endl;
+		
+		const int composite_result =
+		    std::system(composite_command.str().c_str());
+		
+		if (
+		    composite_result != 0 ||
+		    !fs::exists(composite_output_file) ||
+		    fs::file_size(composite_output_file) == 0
+		) {
+		    std::cout
+		        << "[CHANGE_SCENE_COMPOSITE_FAILED]\n"
+		        << "result=" << composite_result << "\n"
+		        << "file=" << composite_output_file.string() << "\n"
+		        << std::endl;
+		
+		    return std::nullopt;
+		}
+		
+		const fs::path saved_output_file =
+		    output_service_.SaveFromComfyOutput(composite_output_file);
 
         update_progress(95);
 

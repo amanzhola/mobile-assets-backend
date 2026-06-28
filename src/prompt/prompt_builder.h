@@ -17,6 +17,12 @@ struct GlamMakeupPromptResult {
     face_edit::FaceEditPlan face_plan;
 };
 
+struct ChangeScenePromptResult {
+    std::string positive_prompt;
+    std::string english_scene;
+    double denoise = 0.55;
+};
+
 class PromptBuilder {
 public:
     explicit PromptBuilder(
@@ -26,6 +32,10 @@ public:
     GlamMakeupPromptResult BuildGlamMakeupPrompt(
         const json::object& request
     ) const;
+    
+    ChangeScenePromptResult BuildChangeScenePrompt(
+	    const json::object& request
+	) const;
 
 private:
     PromptTranslator& translator_;

@@ -191,7 +191,11 @@ std::optional<std::string> RemoveObjectsRunner::Run(
         }
 
         const std::string positive_prompt =
-            "remove only the selected masked object, fill the removed area by matching the surrounding pixels, same colors, same lighting, same texture, seamless realistic photo";
+		    "the masked area is empty background after object removal, "
+		    "completely erase the masked object, no object remains, "
+		    "reconstruct the missing background using surrounding pixels, "
+		    "continue the original background texture, colors, lighting, shadows and perspective, "
+		    "seamless realistic photo inpaint, invisible edit";
 
         json::object workflow =
             workflow_builder_.BuildRemoveObjectsInpaintWorkflow(
@@ -199,7 +203,7 @@ std::optional<std::string> RemoveObjectsRunner::Run(
                 *mask_file_name,
                 output_prefix,
                 positive_prompt,
-                0.48
+                0.58
             );
 
         std::cout

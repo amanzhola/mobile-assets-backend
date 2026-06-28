@@ -221,7 +221,7 @@ std::optional<std::string> RemoveObjectsCleanupRunner::Run(
                 cleanup_mask_name,
                 output_prefix,
                 positive_prompt,
-                0.62
+                0.48
             );
 
         std::cout

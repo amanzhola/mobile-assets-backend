@@ -94,4 +94,70 @@ GlamMakeupPromptResult PromptBuilder::BuildGlamMakeupPrompt(
     };
 }
 
+ChangeScenePromptResult PromptBuilder::BuildChangeScenePrompt(
+    const json::object& request
+) const {
+    std::string user_text =
+        generation::ReadStringOrEmpty(request, "prompt");
+
+    if (user_text.empty()) {
+        user_text = generation::ReadOptionString(request, "scene");
+    }
+
+    if (user_text.empty()) {
+        user_text = generation::ReadOptionString(request, "background");
+    }
+
+    if (user_text.empty()) {
+        user_text = generation::ReadOptionString(request, "details");
+    }
+
+    if (user_text.empty()) {
+        user_text = generation::ReadOptionString(request, "optionalDetails");
+    }
+
+    user_text = CleanPromptText(user_text);
+
+    std::string english_scene;
+
+    if (!user_text.empty()) {
+        auto translated =
+            translator_.TranslateToEnglish(user_text);
+
+        english_scene =
+            translated ? CleanPromptText(*translated) : user_text;
+    }
+
+    std::ostringstream prompt;
+
+	prompt
+	    << "realistic background scene only, no people, no person, no human, "
+	    << "natural photo background, cinematic lighting";
+	
+	if (!english_scene.empty()) {
+	    prompt << ", scene: " << english_scene;
+	} else {
+	    prompt << ", scene: cinematic realistic outdoor background";
+	}
+	
+	prompt
+	    << ", detailed environment, natural colors, realistic depth of field";
+	
+	const double denoise = 1.0;
+
+    std::cout
+        << "[CHANGE_SCENE_PROMPT_BUILT]\n"
+        << "userText=" << user_text << "\n"
+        << "englishScene=" << english_scene << "\n"
+        << "denoise=" << denoise << "\n"
+        << "prompt=" << prompt.str() << "\n"
+        << std::endl;
+
+    return ChangeScenePromptResult{
+        prompt.str(),
+        english_scene,
+        denoise
+    };
+}
+
 }  // namespace prompt

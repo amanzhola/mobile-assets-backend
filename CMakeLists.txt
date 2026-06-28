@@ -54,6 +54,7 @@ add_executable(mobile_assets_backend
     src/face_edit/face_parser.cpp
     src/face_edit/face_masks.cpp
     src/face_edit/face_editor.cpp
+    src/action_runners/change_scene_runner.cpp
 )
 
 target_link_libraries(mobile_assets_backend PRIVATE
